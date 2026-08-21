@@ -71,9 +71,12 @@ map.on(L.Draw.Event.DELETED, function (event) {
 });
 
 // Admin login via header button + modal
-document.getElementById('adminLoginBtn').onclick = () => { document.getElementById('adminModal').style.display = 'flex'; };
-document.getElementById('adminCancel').onclick = () => { document.getElementById('adminModal').style.display = 'none'; };
-document.getElementById('adminSubmit').onclick = async () => {
+const elAdminLogin = document.getElementById('adminLoginBtn');
+if (elAdminLogin) elAdminLogin.onclick = () => { document.getElementById('adminModal').style.display = 'flex'; };
+const elAdminCancel = document.getElementById('adminCancel');
+if (elAdminCancel) elAdminCancel.onclick = () => { document.getElementById('adminModal').style.display = 'none'; };
+const elAdminSubmit = document.getElementById('adminSubmit');
+if (elAdminSubmit) elAdminSubmit.onclick = async () => {
     const username = document.getElementById('admin_user').value;
     const password = document.getElementById('admin_pass').value;
     try{
@@ -89,34 +92,7 @@ document.getElementById('adminSubmit').onclick = async () => {
     }catch(e){ console.error(e); alert('Login error: '+e.message) }
 };
 
-// Admin register flow
-document.getElementById('adminRegisterBtn').onclick = () => { document.getElementById('adminRegisterModal').style.display = 'flex'; };
-document.getElementById('adminRegCancel').onclick = () => { document.getElementById('adminRegisterModal').style.display = 'none'; };
-document.getElementById('adminRegSubmit').onclick = async () => {
-    const username = document.getElementById('admin_reg_user').value;
-    const email = document.getElementById('admin_reg_email').value;
-    const password = document.getElementById('admin_reg_pass').value;
-    const token = localStorage.getItem('admin_token');
-    if (!token) { alert('Please login as admin first'); return }
-    const res = await fetch('/admin/register', {method:'POST', headers: {'Content-Type':'application/json','Authorization':'Bearer '+token}, body: JSON.stringify({username,email,password})});
-    const txt = await res.text();
-    if (!res.ok){ alert('Create admin failed: '+txt); return }
-    alert('Admin created'); document.getElementById('adminRegisterModal').style.display='none';
-}
-
-// Admin reset password flow
-document.getElementById('adminResetBtn').onclick = () => { document.getElementById('adminResetModal').style.display = 'flex'; };
-document.getElementById('adminResetCancel').onclick = () => { document.getElementById('adminResetModal').style.display = 'none'; };
-document.getElementById('adminResetSubmit').onclick = async () => {
-    const username = document.getElementById('admin_reset_user').value;
-    const newpw = document.getElementById('admin_reset_pass').value;
-    const token = localStorage.getItem('admin_token');
-    if (!token) { alert('Please login as admin first'); return }
-    const res = await fetch('/admin/reset_password', {method:'POST', headers: {'Content-Type':'application/json','Authorization':'Bearer '+token}, body: JSON.stringify({username,new_password:newpw})});
-    const txt = await res.text();
-    if (!res.ok){ alert('Reset failed: '+txt); return }
-    alert('Password reset'); document.getElementById('adminResetModal').style.display='none';
-}
+// Admin register/reset UI removed — these actions are available via API/scripts
 
 async function loadFences(){
     fencesLayer.clearLayers();
@@ -176,8 +152,10 @@ document.addEventListener('click', function(ev){
     if (a){ ev.preventDefault(); const id = Number(a.dataset.id); fetch('/api/incidents').then(r=>r.json()).then(data=>{ const inc = data.find(x=>x.id===id); if (inc) showIncident(inc); }); }
 });
 
-document.getElementById('refresh').addEventListener('click', () => { loadFences(); loadIncidents(); });
-document.getElementById('sos').addEventListener('click', async () => {
+const elRefresh = document.getElementById('refresh');
+if (elRefresh) elRefresh.addEventListener('click', () => { loadFences(); loadIncidents(); });
+const elSosDemo = document.getElementById('sos');
+if (elSosDemo) elSosDemo.addEventListener('click', async () => {
         const c = map.getCenter();
         try{
             const res = await fetch('/sos', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({user_id: null, lat: c.lat, lon: c.lng, description: 'Demo SOS from admin'})});
