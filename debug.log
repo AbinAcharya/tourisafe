@@ -1,0 +1,4 @@
+register attempt: debuguser debug@example.com
+password hash ok, len=6
+user created id=1
+register attempt: debuguser debug@example.com

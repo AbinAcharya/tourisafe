@@ -20,3 +20,19 @@ class SOSIn(BaseModel):
     lat: float
     lon: float
     description: Optional[str] = "SOS"
+
+
+class AdminRegister(BaseModel):
+    username: str
+    email: str
+    password: str
+
+
+class AdminReset(BaseModel):
+    username: str
+    new_password: str
+
+
+class ChangePassword(BaseModel):
+    old_password: str
+    new_password: str

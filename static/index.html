@@ -14,6 +14,8 @@
         <button id="refresh" class="ghost">Refresh</button>
         <button id="sos" class="primary">Trigger SOS (demo)</button>
         <button id="adminLoginBtn" class="ghost">Admin Login</button>
+        <button id="adminRegisterBtn" class="ghost">Create Admin</button>
+        <button id="adminResetBtn" class="ghost">Reset Admin PW</button>
       </div>
     </header>
     <main class="map-wrap">
@@ -25,6 +27,14 @@
         </div>
       </aside>
     </main>
+      <!-- Incident details modal -->
+      <div id="incidentModal" class="modal-backdrop" style="display:none">
+        <div class="modal">
+          <h3>Incident Details</h3>
+          <div id="incidentDetails"></div>
+          <div class="actions"><button id="incidentClose" class="ghost">Close</button></div>
+        </div>
+      </div>
     <!-- Admin login modal -->
     <div id="adminModal" class="modal-backdrop" style="display:none">
       <div class="modal">
@@ -32,6 +42,27 @@
         <div class="form-row"><label>Username</label><input id="admin_user" /></div>
         <div class="form-row"><label>Password</label><input id="admin_pass" type="password" /></div>
         <div class="actions"><button id="adminCancel" class="ghost">Cancel</button><button id="adminSubmit" class="primary">Login</button></div>
+      </div>
+    </div>
+
+    <!-- Admin register modal -->
+    <div id="adminRegisterModal" class="modal-backdrop" style="display:none">
+      <div class="modal">
+        <h3>Create Admin</h3>
+        <div class="form-row"><label>Username</label><input id="admin_reg_user" /></div>
+        <div class="form-row"><label>Email</label><input id="admin_reg_email" /></div>
+        <div class="form-row"><label>Password</label><input id="admin_reg_pass" type="password" /></div>
+        <div class="actions"><button id="adminRegCancel" class="ghost">Cancel</button><button id="adminRegSubmit" class="primary">Create</button></div>
+      </div>
+    </div>
+
+    <!-- Admin reset modal -->
+    <div id="adminResetModal" class="modal-backdrop" style="display:none">
+      <div class="modal">
+        <h3>Reset Admin Password</h3>
+        <div class="form-row"><label>Target Username</label><input id="admin_reset_user" /></div>
+        <div class="form-row"><label>New Password</label><input id="admin_reset_pass" type="password" /></div>
+        <div class="actions"><button id="adminResetCancel" class="ghost">Cancel</button><button id="adminResetSubmit" class="primary">Reset</button></div>
       </div>
     </div>
 

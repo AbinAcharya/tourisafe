@@ -15,6 +15,9 @@ from fastapi import WebSocket
 
 Base.metadata.create_all(bind=engine)
 
+# NOTE: removed automatic creation of a default admin user to allow manual admin setup
+# Use the script scripts/create_admin.py to create an admin account when needed.
+
 app = FastAPI(title="Tourisafe - Smart Tourist Safety System")
 
 app.add_middleware(
@@ -30,14 +33,24 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.post("/register")
 def register(username: str, email: str, password: str, db: Session = Depends(get_db)):
-    existing = db.query(models.User).filter((models.User.username == username) | (models.User.email == email)).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="Username or email already registered")
-    user = models.User(username=username, email=email, password_hash=auth.get_password_hash(password))
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-    return {"id": user.id, "username": user.username}
+    try:
+        # debug log
+        with open('debug.log','a') as _f: _f.write(f"register attempt: {username} {email}\n")
+        existing = db.query(models.User).filter((models.User.username == username) | (models.User.email == email)).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="Username or email already registered")
+        ph = auth.get_password_hash(password)
+        with open('debug.log','a') as _f: _f.write(f"password hash ok, len={len(ph)}\n")
+        user = models.User(username=username, email=email, password_hash=ph)
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        with open('debug.log','a') as _f: _f.write(f"user created id={user.id}\n")
+        return {"id": user.id, "username": user.username}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Registration error: {e}")
 
 
 @app.post("/login")
@@ -96,17 +109,21 @@ def ingest_telemetry(payload: schemas.TelemetryIn, db: Session = Depends(get_db)
             ts = datetime.utcnow()
     else:
         ts = datetime.utcnow()
-    t = models.Telemetry(user_id=payload.user_id, lat=payload.lat, lon=payload.lon, timestamp=ts)
-    # compute speed from last point
-    prev = None
-    if payload.user_id is not None:
-        prev = db.query(models.Telemetry).filter(models.Telemetry.user_id == payload.user_id).order_by(models.Telemetry.timestamp.desc()).first()
-    if prev:
-        speed = telemetry_utils.compute_speed_m_s((prev.lat, prev.lon), prev.timestamp, (lat, lon), ts)
-        t.speed = speed
-    db.add(t)
-    db.commit()
-    db.refresh(t)
+    try:
+        t = models.Telemetry(user_id=payload.user_id, lat=payload.lat, lon=payload.lon, timestamp=ts)
+        # compute speed from last point
+        prev = None
+        if payload.user_id is not None:
+            prev = db.query(models.Telemetry).filter(models.Telemetry.user_id == payload.user_id).order_by(models.Telemetry.timestamp.desc()).first()
+        if prev:
+            speed = telemetry_utils.compute_speed_m_s((prev.lat, prev.lon), prev.timestamp, (payload.lat, payload.lon), ts)
+            t.speed = speed
+        db.add(t)
+        db.commit()
+        db.refresh(t)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Telemetry ingest error: {e}")
+    
     # broadcast telemetry event if anomaly or simply to update map
     if t.speed and t.speed > 20:  # threshold m/s ~72 km/h
         try:
@@ -128,25 +145,66 @@ def ingest_telemetry(payload: schemas.TelemetryIn, db: Session = Depends(get_db)
 
 @app.post("/sos")
 def sos(payload: schemas.SOSIn, db: Session = Depends(get_db)):
-    inc = models.Incident(user_id=payload.user_id, lat=payload.lat, lon=payload.lon, description=payload.description)
-    db.add(inc)
-    db.commit()
-    db.refresh(inc)
-    # create notification
-    alerts.notify_authorities(inc.id)
-    # broadcast incident via websocket
     try:
-        import asyncio
-        asyncio.create_task(manager.broadcast({"type": "incident_created", "id": inc.id, "lat": inc.lat, "lon": inc.lon, "description": inc.description}))
-    except Exception:
-        pass
-    return {"incident_id": inc.id, "status": inc.status}
+        inc = models.Incident(user_id=payload.user_id, lat=payload.lat, lon=payload.lon, description=payload.description)
+        db.add(inc)
+        db.commit()
+        db.refresh(inc)
+        # create notification
+        alerts.notify_authorities(inc.id)
+        # broadcast incident via websocket
+        try:
+            import asyncio
+            asyncio.create_task(manager.broadcast({"type": "incident_created", "id": inc.id, "lat": inc.lat, "lon": inc.lon, "description": inc.description}))
+        except Exception:
+            pass
+        return {"incident_id": inc.id, "status": inc.status}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"SOS error: {e}")
 
 
 @app.get("/api/incidents")
 def get_incidents(db: Session = Depends(get_db)):
     incidents = db.query(models.Incident).order_by(models.Incident.timestamp.desc()).limit(200).all()
     return [{"id": i.id, "lat": i.lat, "lon": i.lon, "desc": i.description, "status": i.status, "ts": i.timestamp.isoformat()} for i in incidents]
+
+
+@app.post('/admin/register')
+def admin_register(payload: schemas.AdminRegister, user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+    if not user.is_admin:
+        raise HTTPException(status_code=403, detail='Admin required')
+    existing = db.query(models.User).filter((models.User.username == payload.username) | (models.User.email == payload.email)).first()
+    if existing:
+        raise HTTPException(status_code=400, detail='Username or email already exists')
+    ph = auth.get_password_hash(payload.password)
+    u = models.User(username=payload.username, email=payload.email, password_hash=ph, is_admin=True)
+    db.add(u)
+    db.commit()
+    db.refresh(u)
+    return {'id': u.id, 'username': u.username}
+
+
+@app.post('/admin/reset_password')
+def admin_reset_password(payload: schemas.AdminReset, user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+    if not user.is_admin:
+        raise HTTPException(status_code=403, detail='Admin required')
+    target = db.query(models.User).filter(models.User.username == payload.username).first()
+    if not target:
+        raise HTTPException(status_code=404, detail='User not found')
+    target.password_hash = auth.get_password_hash(payload.new_password)
+    db.add(target)
+    db.commit()
+    return {'status': 'ok'}
+
+
+@app.post('/admin/change_password')
+def admin_change_password(payload: schemas.ChangePassword, user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+    if not auth.verify_password(payload.old_password, user.password_hash):
+        raise HTTPException(status_code=400, detail='Incorrect old password')
+    user.password_hash = auth.get_password_hash(payload.new_password)
+    db.add(user)
+    db.commit()
+    return {'status': 'ok'}
 
 
 @app.get("/")
