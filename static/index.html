@@ -8,12 +8,48 @@
     <style>html,body,#map{height:100%;margin:0;padding:0} #controls{position:absolute;top:10px;left:10px;z-index:1000;background:white;padding:8px;border-radius:6px}</style>
   </head>
   <body>
-    <div id="controls">
-      <button id="refresh">Refresh</button>
-      <button id="sos">Trigger SOS (demo)</button>
+    <header class="topbar">
+      <div class="brand">Tourisafe — Admin</div>
+      <div class="controls">
+        <button id="refresh" class="ghost">Refresh</button>
+        <button id="sos" class="primary">Trigger SOS (demo)</button>
+        <button id="adminLoginBtn" class="ghost">Admin Login</button>
+      </div>
+    </header>
+    <main class="map-wrap">
+      <div id="map"></div>
+      <aside class="sidebar">
+        <div class="panel">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><strong>Active Incidents</strong><a href="/api/incidents">View API</a></div>
+          <div id="incidentList" class="list status">No incidents yet</div>
+        </div>
+      </aside>
+    </main>
+    <!-- Admin login modal -->
+    <div id="adminModal" class="modal-backdrop" style="display:none">
+      <div class="modal">
+        <h3>Admin Login</h3>
+        <div class="form-row"><label>Username</label><input id="admin_user" /></div>
+        <div class="form-row"><label>Password</label><input id="admin_pass" type="password" /></div>
+        <div class="actions"><button id="adminCancel" class="ghost">Cancel</button><button id="adminSubmit" class="primary">Login</button></div>
+      </div>
     </div>
-    <div id="map"></div>
+
+    <!-- Fence create modal -->
+    <div id="fenceModal" class="modal-backdrop" style="display:none">
+      <div class="modal">
+        <h3>Create Fence</h3>
+        <div class="form-row"><label>Name</label><input id="fence_name" /></div>
+        <div class="form-row"><label>Type</label>
+          <select id="fence_type"><option value="restricted">Restricted</option><option value="safe">Safe</option><option value="high-risk">High-risk</option></select>
+        </div>
+        <div class="actions"><button id="fenceCancel" class="ghost">Cancel</button><button id="fenceCreate" class="primary">Save Fence</button></div>
+      </div>
+    </div>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="/static/admin.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+    <link rel="stylesheet" href="/static/styles.css?v=1">
+    <script src="/static/admin.js?v=2"></script>
   </body>
 </html>

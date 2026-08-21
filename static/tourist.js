@@ -19,24 +19,45 @@ loadFences();
 function setStatus(s){ document.getElementById('status').innerText = s }
 
 document.getElementById('registerBtn').onclick = async () => {
-  const username = prompt('username');
-  const email = prompt('email');
-  const password = prompt('password');
-  const res = await fetch('/register?username='+encodeURIComponent(username)+'&email='+encodeURIComponent(email)+'&password='+encodeURIComponent(password), {method:'POST'});
-  const data = await res.json();
-  setStatus('Registered id='+data.id);
-  localStorage.setItem('tourist_user_id', data.id);
+  document.getElementById('authTitle').innerText = 'Register';
+  document.getElementById('auth_user').value = '';
+  document.getElementById('auth_email').value = '';
+  document.getElementById('auth_pass').value = '';
+  document.getElementById('authModal').style.display = 'flex';
+  // set handler
+  document.getElementById('authSubmit').onclick = async () => {
+    const username = document.getElementById('auth_user').value;
+    const email = document.getElementById('auth_email').value;
+    const password = document.getElementById('auth_pass').value;
+    const res = await fetch('/register?username='+encodeURIComponent(username)+'&email='+encodeURIComponent(email)+'&password='+encodeURIComponent(password), {method:'POST'});
+    if (!res.ok) { setStatus('Register failed'); return }
+    const data = await res.json();
+    setStatus('Registered id='+data.id);
+    localStorage.setItem('tourist_user_id', data.id);
+    document.getElementById('authModal').style.display = 'none';
+  };
 }
 
 document.getElementById('loginBtn').onclick = async () => {
-  const username = prompt('username');
-  const password = prompt('password');
-  const form = new FormData(); form.append('username', username); form.append('password', password);
-  const res = await fetch('/login', {method:'POST', body: form});
-  const data = await res.json();
-  setStatus('Logged in');
-  localStorage.setItem('tourist_token', data.access_token);
+  document.getElementById('authTitle').innerText = 'Login';
+  document.getElementById('auth_user').value = '';
+  document.getElementById('auth_email').value = '';
+  document.getElementById('auth_pass').value = '';
+  document.getElementById('authModal').style.display = 'flex';
+  document.getElementById('authSubmit').onclick = async () => {
+    const username = document.getElementById('auth_user').value;
+    const password = document.getElementById('auth_pass').value;
+    const form = new FormData(); form.append('username', username); form.append('password', password);
+    const res = await fetch('/login', {method:'POST', body: form});
+    if (!res.ok) { setStatus('Login failed'); return }
+    const data = await res.json();
+    setStatus('Logged in');
+    localStorage.setItem('tourist_token', data.access_token);
+    document.getElementById('authModal').style.display = 'none';
+  };
 }
+
+document.getElementById('authCancel').onclick = () => { document.getElementById('authModal').style.display = 'none'; };
 
 async function sendTelemetry(lat, lon){
   const payload = { user_id: localStorage.getItem('tourist_user_id') ? Number(localStorage.getItem('tourist_user_id')) : null, lat, lon };

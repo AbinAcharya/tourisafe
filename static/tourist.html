@@ -8,16 +8,34 @@
     <style>html,body,#map{height:70%;margin:0;padding:0} #panel{padding:8px}</style>
   </head>
   <body>
-    <div id="panel">
-      <button id="registerBtn">Register</button>
-      <button id="loginBtn">Login</button>
-      <button id="startTelemetry">Start Telemetry</button>
-      <button id="stopTelemetry">Stop Telemetry</button>
-      <button id="sosBtn">Send SOS</button>
-      <div id="status"></div>
+    <header class="topbar">
+      <div class="brand">Tourisafe — Tourist</div>
+      <div class="controls">
+        <button id="registerBtn" class="ghost">Register</button>
+        <button id="loginBtn" class="ghost">Login</button>
+        <button id="startTelemetry" class="primary">Start Telemetry</button>
+        <button id="stopTelemetry" class="ghost">Stop Telemetry</button>
+        <button id="sosBtn" class="danger">Send SOS</button>
+      </div>
+    </header>
+    <main class="map-wrap">
+      <div id="map"></div>
+      <div style="position:absolute;left:16px;bottom:16px;z-index:1000">
+        <div class="panel status" id="status">Status: idle</div>
+      </div>
+    </main>
+    <!-- Auth modal -->
+    <div id="authModal" class="modal-backdrop" style="display:none">
+      <div class="modal">
+        <h3 id="authTitle">Login</h3>
+        <div class="form-row"><label>Username</label><input id="auth_user" /></div>
+        <div class="form-row"><label>Email (for register)</label><input id="auth_email" /></div>
+        <div class="form-row"><label>Password</label><input id="auth_pass" type="password" /></div>
+        <div class="actions"><button id="authCancel" class="ghost">Cancel</button><button id="authSubmit" class="primary">Submit</button></div>
+      </div>
     </div>
-    <div id="map"></div>
+    <link rel="stylesheet" href="/static/styles.css?v=1">
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="/static/tourist.js"></script>
+    <script src="/static/tourist.js?v=2"></script>
   </body>
 </html>

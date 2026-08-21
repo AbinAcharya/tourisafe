@@ -28,58 +28,68 @@ const drawControl = new L.Control.Draw({ edit: { featureGroup: drawnItems }, dra
 map.addControl(drawControl);
 
 map.on(L.Draw.Event.CREATED, function (event) {
-        const layer = event.layer;
-        drawnItems.addLayer(layer);
-        const geojson = layer.toGeoJSON();
-        const name = prompt('Fence name');
-        const type = prompt('Fence type (safe/restricted/high-risk)', 'restricted');
-        const token = localStorage.getItem('admin_token');
-        if (!token) { alert('Please set admin token via Login button'); return }
-        fetch('/fences', {method:'POST', headers: {'Content-Type':'application/json', 'Authorization': 'Bearer '+token}, body: JSON.stringify({name, fence_type: type, geojson: geojson.geometry})}).then(r=>r.json()).then(d=>{ alert('Fence created id='+d.id); loadFences(); });
+    const layer = event.layer;
+    drawnItems.addLayer(layer);
+    const geojson = layer.toGeoJSON();
+    // store pending geojson and open fence modal
+    window._pendingFence = geojson.geometry;
+    document.getElementById('fence_name').value = '';
+    document.getElementById('fence_type').value = 'restricted';
+    document.getElementById('fenceModal').style.display = 'flex';
 });
+
+// fence modal handlers
+document.getElementById('fenceCancel').onclick = () => { document.getElementById('fenceModal').style.display = 'none'; window._pendingFence = null; };
+document.getElementById('fenceCreate').onclick = async () => {
+    const name = document.getElementById('fence_name').value;
+    const type = document.getElementById('fence_type').value;
+    const token = localStorage.getItem('admin_token');
+    if (!token) { alert('Please login as admin first'); return }
+    const geojson = window._pendingFence;
+    document.getElementById('fenceModal').style.display = 'none';
+    const res = await fetch('/fences', {method:'POST', headers: {'Content-Type':'application/json', 'Authorization': 'Bearer '+token}, body: JSON.stringify({name, fence_type: type, geojson: geojson})});
+    if (res.ok) { const d = await res.json(); alert('Fence created id='+d.id); loadFences(); }
+    window._pendingFence = null;
+};
 
 map.on(L.Draw.Event.EDITED, function (event) {
     const layers = event.layers;
     layers.eachLayer(function(layer){
         const geojson = layer.toGeoJSON();
-        const id = layer._leaflet_id; // not same as DB id; skipping mapping complexity
-        // For simplicity we create a new fence and remove the old one.
-        const name = prompt('Updated fence name');
-        const type = prompt('Fence type (safe/restricted/high-risk)', 'restricted');
-        const token = localStorage.getItem('admin_token');
-        if (!token) { alert('Please set admin token via Login button'); return }
-        fetch('/fences', {method:'POST', headers: {'Content-Type':'application/json', 'Authorization': 'Bearer '+token}, body: JSON.stringify({name, fence_type: type, geojson: geojson.geometry})}).then(r=>r.json()).then(d=>{ alert('Fence updated (created new) id='+d.id); loadFences(); });
+        window._pendingFence = geojson.geometry;
+        document.getElementById('fence_name').value = '';
+        document.getElementById('fence_type').value = 'restricted';
+        document.getElementById('fenceModal').style.display = 'flex';
     });
 });
 
 map.on(L.Draw.Event.DELETED, function (event) {
     const layers = event.layers;
     layers.eachLayer(function(layer){
-        // Deletion must map to DB id; admin must use the refresh list and delete by id.
-        const id = prompt('Enter DB fence id to delete');
-        const token = localStorage.getItem('admin_token');
-        if (!token) { alert('Please set admin token via Login button'); return }
-        if (!id) return;
-        fetch('/fences/'+id, {method:'DELETE', headers: {'Authorization':'Bearer '+token}}).then(r=>{ if(r.ok) alert('deleted'); loadFences(); });
+        alert('To delete a fence, use the fence list in the sidebar and delete by DB id.');
     });
 });
 
-// Admin login helper
-const adminLoginBtn = L.control({position: 'topright'});
-adminLoginBtn.onAdd = function () {
-    const el = L.DomUtil.create('div', 'admin-login');
-    el.innerHTML = '<button id="adminLogin">Admin Login</button>';
-    return el;
+// Admin login via header button + modal
+document.getElementById('adminLoginBtn').onclick = () => { document.getElementById('adminModal').style.display = 'flex'; };
+document.getElementById('adminCancel').onclick = () => { document.getElementById('adminModal').style.display = 'none'; };
+document.getElementById('adminSubmit').onclick = async () => {
+    const username = document.getElementById('admin_user').value;
+    const password = document.getElementById('admin_pass').value;
+    const form = new FormData(); form.append('username', username); form.append('password', password);
+    const res = await fetch('/login', {method:'POST', body: form});
+    if (!res.ok) { alert('login failed'); return }
+    const data = await res.json(); localStorage.setItem('admin_token', data.access_token);
+    document.getElementById('adminModal').style.display = 'none'; alert('token saved');
 };
-adminLoginBtn.addTo(map);
-document.addEventListener('click', async (e)=>{ if (e.target && e.target.id === 'adminLogin'){ const username = prompt('admin username'); const password = prompt('password'); const form = new FormData(); form.append('username', username); form.append('password', password); const res = await fetch('/login', {method:'POST', body: form}); const data = await res.json(); localStorage.setItem('admin_token', data.access_token); alert('token saved'); } });
 
 async function loadFences(){
     fencesLayer.clearLayers();
     const res = await fetch('/api/fences');
     const data = await res.json();
     data.forEach(f => {
-        L.geoJSON(f.geojson, {style: {color: f.fence_type === 'restricted' ? 'red' : 'green'}}).bindPopup(f.name).addTo(fencesLayer);
+        const g = L.geoJSON(f.geojson, {style: {color: f.fence_type === 'restricted' ? 'red' : 'green'}}).bindPopup(f.name).addTo(fencesLayer);
+        g.eachLayer(layer => { if (layer.feature) layer.feature.properties = layer.feature.properties || {}; layer.feature.properties.db_id = f.id; });
     });
 }
 
@@ -89,6 +99,15 @@ async function loadIncidents(){
     const data = await res.json();
     data.forEach(i => {
         L.marker([i.lat, i.lon]).bindPopup(i.desc || 'Incident').addTo(incidentsLayer);
+    });
+    // populate sidebar incident list
+    const list = document.getElementById('incidentList');
+    if (!data.length) { list.innerHTML = 'No incidents yet'; return }
+    list.innerHTML = '';
+    data.forEach(i => {
+        const el = document.createElement('div'); el.className = 'list-item';
+        el.innerHTML = `<div class="incident-title">Incident #${i.id}</div><div class="incident-meta">${i.desc || ''} • ${i.ts}</div>`;
+        list.appendChild(el);
     });
 }
 
