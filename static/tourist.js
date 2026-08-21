@@ -1,0 +1,73 @@
+const map = L.map('map').setView([20.5937,78.9629], 5);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19}).addTo(map);
+
+let marker = null;
+let watchId = null;
+let telemetryInterval = null;
+let fencesLayer = L.geoJSON().addTo(map);
+
+async function loadFences(){
+  fencesLayer.clearLayers();
+  const res = await fetch('/api/fences');
+  const data = await res.json();
+  data.forEach(f => {
+    L.geoJSON(f.geojson, {style: {color: f.fence_type === 'restricted' ? 'red' : 'green'}}).addTo(fencesLayer);
+  });
+}
+loadFences();
+
+function setStatus(s){ document.getElementById('status').innerText = s }
+
+document.getElementById('registerBtn').onclick = async () => {
+  const username = prompt('username');
+  const email = prompt('email');
+  const password = prompt('password');
+  const res = await fetch('/register?username='+encodeURIComponent(username)+'&email='+encodeURIComponent(email)+'&password='+encodeURIComponent(password), {method:'POST'});
+  const data = await res.json();
+  setStatus('Registered id='+data.id);
+  localStorage.setItem('tourist_user_id', data.id);
+}
+
+document.getElementById('loginBtn').onclick = async () => {
+  const username = prompt('username');
+  const password = prompt('password');
+  const form = new FormData(); form.append('username', username); form.append('password', password);
+  const res = await fetch('/login', {method:'POST', body: form});
+  const data = await res.json();
+  setStatus('Logged in');
+  localStorage.setItem('tourist_token', data.access_token);
+}
+
+async function sendTelemetry(lat, lon){
+  const payload = { user_id: localStorage.getItem('tourist_user_id') ? Number(localStorage.getItem('tourist_user_id')) : null, lat, lon };
+  await fetch('/telemetry', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+}
+
+document.getElementById('startTelemetry').onclick = async () => {
+  if (navigator.geolocation){
+    watchId = navigator.geolocation.watchPosition(async (pos)=>{
+      const lat = pos.coords.latitude, lon = pos.coords.longitude;
+      if (marker) marker.setLatLng([lat,lon]); else marker = L.marker([lat,lon]).addTo(map);
+      map.setView([lat,lon], 15);
+      await sendTelemetry(lat, lon);
+      setStatus('Telemetry sent: '+lat.toFixed(5)+','+lon.toFixed(5));
+    }, err => setStatus('geo error:'+err.message), {enableHighAccuracy:true});
+  } else {
+    setStatus('Geolocation not available');
+  }
+}
+
+document.getElementById('stopTelemetry').onclick = () => {
+  if (watchId) navigator.geolocation.clearWatch(watchId);
+  setStatus('Stopped telemetry');
+}
+
+document.getElementById('sosBtn').onclick = async () => {
+  let lat, lon;
+  if (marker){ lat = marker.getLatLng().lat; lon = marker.getLatLng().lng; }
+  else { alert('please enable telemetry or allow location'); return }
+  const payload = { user_id: localStorage.getItem('tourist_user_id') ? Number(localStorage.getItem('tourist_user_id')) : null, lat, lon, description: 'SOS from tourist' };
+  const res = await fetch('/sos', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+  const data = await res.json();
+  setStatus('SOS sent: incident '+data.incident_id);
+}

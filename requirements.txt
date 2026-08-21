@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+SQLAlchemy
+passlib[bcrypt]
+python-jose
+shapely
+geopy
+python-multipart
+requests
