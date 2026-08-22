@@ -6,6 +6,44 @@ let watchId = null;
 let telemetryInterval = null;
 let fencesLayer = L.geoJSON().addTo(map);
 
+// WebSocket for realtime alerts (incidents, fence alerts, telemetry anomalies)
+try{
+  const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  const ws = new WebSocket(protocol + '://' + window.location.host + '/ws');
+  ws.onmessage = (ev) => {
+    try{
+      const msg = JSON.parse(ev.data);
+      if (msg.type === 'incident_created'){
+        L.marker([msg.lat, msg.lon]).bindPopup(msg.description || 'Incident').addTo(map);
+        notify('Incident reported', msg.description || 'An incident was reported nearby');
+        setStatus('Incident reported');
+      }
+      if (msg.type === 'telemetry_anomaly'){
+        L.circle([msg.lat, msg.lon], {radius:50, color:'orange'}).addTo(map);
+        notify('Telemetry anomaly', `User ${msg.user_id} speed ${msg.speed}`);
+      }
+      if (msg.type === 'fence_created'){
+        // add to fences layer
+        const g = L.geoJSON(msg.geojson, {style: {color: msg.fence_type === 'restricted' ? 'red' : (msg.fence_type === 'high-risk' ? 'orange' : 'green')}}).addTo(fencesLayer);
+        // if current user location exists and inside, notify if high-risk
+        if (marker && msg.fence_type === 'high-risk'){
+          const p = [marker.getLatLng().lat, marker.getLatLng().lng];
+          if (pointInPolygon(p, msg.geojson)){
+            notify('High-risk area', `You are inside high-risk area: ${msg.name}`);
+            setStatus('Entered high-risk area: '+msg.name);
+          }
+        }
+      }
+      if (msg.type === 'fence_alert'){
+        // server detected a user inside a high-risk fence
+        notify('High-risk alert', `Entered ${msg.fence}`);
+        setStatus('High-risk alert: '+msg.fence);
+        L.circle([msg.lat, msg.lon], {radius:50, color:'red'}).addTo(map);
+      }
+    }catch(e){ console.error(e) }
+  }
+}catch(e){console.warn('WebSocket failed', e)}
+
 async function loadFences(){
   fencesLayer.clearLayers();
   const res = await fetch('/api/fences');
@@ -101,6 +139,40 @@ document.getElementById('stopTelemetry').onclick = () => {
   document.getElementById('stopTelemetry').disabled = true;
 }
 
+// small helper: browser notification (asks permission on first use)
+function notify(title, body){
+  try{
+    if (window.Notification && Notification.permission !== 'granted') Notification.requestPermission();
+    if (window.Notification && Notification.permission === 'granted') new Notification(title, {body});
+    else alert(title + '\n' + body);
+  }catch(e){ console.warn(e); }
+}
+
+// point-in-polygon for GeoJSON Polygon/MultiPolygon (ray-casting)
+function pointInPolygon(point, geojson){
+  // point: [lat, lon]
+  const lat = point[0], lon = point[1];
+  function pip(coords){
+    let inside = false;
+    for (let i=0,j=coords.length-1;i<coords.length;j=i++){
+      const xi = coords[i][0], yi = coords[i][1]; // xi=lng, yi=lat
+      const xj = coords[j][0], yj = coords[j][1];
+      const intersect = ((yi>lat) !== (yj>lat)) && (lon < (xj - xi) * (lat - yi) / (yj - yi + 0.0) + xi);
+      if (intersect) inside = !inside;
+    }
+    return inside;
+  }
+  if (!geojson) return false;
+  if (geojson.type === 'Polygon'){
+    return pip(geojson.coordinates[0]);
+  }
+  if (geojson.type === 'MultiPolygon'){
+    for (const poly of geojson.coordinates){ if (pip(poly[0])) return true; }
+    return false;
+  }
+  return false;
+}
+
 document.getElementById('sosBtn').onclick = async () => {
   let lat, lon;
   if (marker){ lat = marker.getLatLng().lat; lon = marker.getLatLng().lng; }
@@ -111,4 +183,5 @@ document.getElementById('sosBtn').onclick = async () => {
   if (!res.ok){ try{ const j = await res.json(); setStatus('SOS error: '+(j.detail||res.statusText)); }catch(e){ setStatus('SOS error: '+res.statusText); } return }
   const data = await res.json();
   setStatus('SOS sent: incident '+data.incident_id);
+  notify('SOS sent', 'Incident '+data.incident_id);
 }

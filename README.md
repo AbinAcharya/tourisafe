@@ -14,6 +14,20 @@ pip install -r requirements.txt
 
 ```bash
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+Windows one-click start (recommended if you run on Windows):
+
+Double-click `run.bat` or run from PowerShell/CMD:
+
+```powershell
+.\run.bat
+```
+
+Or use the PowerShell helper:
+
+```powershell
+.\start.ps1
+```
 ```
 
 3. Open the admin dashboard at http://localhost:8000/ (Leaflet map)

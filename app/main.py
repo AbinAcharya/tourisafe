@@ -80,6 +80,12 @@ def create_fence(fence: schemas.FenceCreate, user: models.User = Depends(auth.ge
     db.add(f)
     db.commit()
     db.refresh(f)
+    # broadcast new fence to connected clients so UIs can update live
+    try:
+        import asyncio
+        asyncio.create_task(manager.broadcast({"type": "fence_created", "id": f.id, "name": f.name, "fence_type": f.fence_type, "geojson": json.loads(f.geojson)}))
+    except Exception:
+        pass
     return {"id": f.id}
 
 
@@ -135,8 +141,17 @@ def ingest_telemetry(payload: schemas.TelemetryIn, db: Session = Depends(get_db)
     fences = db.query(models.GeoFence).filter(models.GeoFence.active == True).all()
     flags = []
     for f in fences:
-        if fencing.point_in_geojson(f.geojson, lat, lon) and f.fence_type == "restricted":
-            flags.append({"fence": f.name, "type": f.fence_type})
+        if fencing.point_in_geojson(f.geojson, t.lat, t.lon):
+            if f.fence_type == "restricted":
+                flags.append({"fence": f.name, "type": f.fence_type})
+            # notify when entering high-risk fences
+            if f.fence_type == "high-risk":
+                flags.append({"fence": f.name, "type": f.fence_type})
+                try:
+                    import asyncio
+                    asyncio.create_task(manager.broadcast({"type": "fence_alert", "user_id": t.user_id, "fence": f.name, "fence_type": f.fence_type, "lat": t.lat, "lon": t.lon}))
+                except Exception:
+                    pass
     anomaly = None
     if t.speed and t.speed > 50:  # >50 m/s ~ unrealistic
         anomaly = "excessive_speed"

@@ -72,6 +72,10 @@ map.on(L.Draw.Event.DELETED, function (event) {
 
 // Admin login via header button + modal
 const elAdminLogin = document.getElementById('adminLoginBtn');
+function syncAdminLoginButton(){
+    if (elAdminLogin) elAdminLogin.style.display = localStorage.getItem('admin_token') ? 'none' : '';
+}
+syncAdminLoginButton();
 if (elAdminLogin) elAdminLogin.onclick = () => { document.getElementById('adminModal').style.display = 'flex'; };
 const elAdminCancel = document.getElementById('adminCancel');
 if (elAdminCancel) elAdminCancel.onclick = () => { document.getElementById('adminModal').style.display = 'none'; };
@@ -87,6 +91,7 @@ if (elAdminSubmit) elAdminSubmit.onclick = async () => {
         try{ data = JSON.parse(text); } catch(e) { }
         if (!res.ok){ const msg = data && data.detail ? data.detail : text || res.statusText; alert('Login failed: '+msg); return }
         localStorage.setItem('admin_token', data.access_token);
+        syncAdminLoginButton();
         document.getElementById('adminModal').style.display = 'none';
         alert('Admin login successful');
     }catch(e){ console.error(e); alert('Login error: '+e.message) }
@@ -99,7 +104,8 @@ async function loadFences(){
     const res = await fetch('/api/fences');
     const data = await res.json();
     data.forEach(f => {
-        const g = L.geoJSON(f.geojson, {style: {color: f.fence_type === 'restricted' ? 'red' : 'green'}}).bindPopup(f.name).addTo(fencesLayer);
+        const color = f.fence_type === 'restricted' ? 'red' : (f.fence_type === 'high-risk' ? 'orange' : 'green');
+        const g = L.geoJSON(f.geojson, {style: {color}}).bindPopup(f.name).addTo(fencesLayer);
         g.eachLayer(layer => { if (layer.feature) layer.feature.properties = layer.feature.properties || {}; layer.feature.properties.db_id = f.id; });
     });
 }
