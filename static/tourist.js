@@ -1,10 +1,51 @@
-const map = L.map('map').setView([20.5937,78.9629], 5);
+const map = L.map('map', {zoomControl: false, scrollWheelZoom: true, keyboard: true}).setView([20.5937,78.9629], 5);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19}).addTo(map);
 
 let marker = null;
 let watchId = null;
 let telemetryInterval = null;
 let fencesLayer = L.geoJSON().addTo(map);
+const defaultView = [20.5937, 78.9629];
+
+function setupMapControls(){
+  document.getElementById('touristZoomIn')?.addEventListener('click', () => map.zoomIn());
+  document.getElementById('touristZoomOut')?.addEventListener('click', () => map.zoomOut());
+  document.getElementById('touristResetView')?.addEventListener('click', () => map.setView(defaultView, 5));
+  document.getElementById('touristFullscreen')?.addEventListener('click', () => document.querySelector('.map-wrap')?.requestFullscreen?.());
+  document.getElementById('touristLocate')?.addEventListener('click', () => {
+    if (marker) map.setView(marker.getLatLng(), Math.max(map.getZoom(), 15));
+    else setStatus('Start tracking to locate yourself');
+  });
+}
+setupMapControls();
+
+const touristNotificationStore = JSON.parse(localStorage.getItem('tourist_notifications') || '[]');
+function addTouristNotification(title, body, tone='warning'){
+  touristNotificationStore.unshift({title, body, tone, time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})});
+  touristNotificationStore.splice(0, Math.max(0, touristNotificationStore.length - 12));
+  localStorage.setItem('tourist_notifications', JSON.stringify(touristNotificationStore));
+  renderTouristNotifications();
+  addTimelineItem(title, body);
+}
+function renderTouristNotifications(){
+  const list = document.getElementById('touristNotificationList');
+  const count = document.getElementById('touristNotificationCount');
+  if (!list || !count) return;
+  count.hidden = !touristNotificationStore.length;
+  count.textContent = touristNotificationStore.length;
+  list.innerHTML = touristNotificationStore.length ? touristNotificationStore.map(n => `<div class="notification-item ${n.tone}"><strong>${n.title}</strong><small>${n.body} · ${n.time}</small></div>`).join('') : '<div class="empty-state">No new activity</div>';
+}
+function addTimelineItem(title, body){
+  const list = document.getElementById('timelineList');
+  if (!list) return;
+  const item = document.createElement('div'); item.className = 'timeline-item';
+  item.innerHTML = `<span></span><p><strong>${title}</strong><small>${body}</small></p>`;
+  list.prepend(item);
+  while (list.children.length > 4) list.lastElementChild.remove();
+}
+renderTouristNotifications();
+document.getElementById('touristNotifications')?.addEventListener('click', () => { const drawer = document.getElementById('touristNotificationDrawer'); drawer.hidden = !drawer.hidden; });
+document.getElementById('touristClearNotifications')?.addEventListener('click', () => { touristNotificationStore.splice(0); localStorage.setItem('tourist_notifications', '[]'); renderTouristNotifications(); });
 
 // WebSocket for realtime alerts (incidents, fence alerts, telemetry anomalies)
 try{
@@ -49,12 +90,18 @@ async function loadFences(){
   const res = await fetch('/api/fences');
   const data = await res.json();
   data.forEach(f => {
-    L.geoJSON(f.geojson, {style: {color: f.fence_type === 'restricted' ? 'red' : 'green'}}).addTo(fencesLayer);
+    L.geoJSON(f.geojson, {style: {color: f.fence_type === 'restricted' ? 'red' : (f.fence_type === 'high-risk' ? 'orange' : 'green')}}).addTo(fencesLayer);
   });
 }
 loadFences();
 
-function setStatus(s){ document.getElementById('status').innerText = s }
+function setStatus(s){
+  const status = document.getElementById('status');
+  if (!status) return;
+  const title = status.querySelector('strong'); const detail = status.querySelector('small');
+  if (title && detail){ title.textContent = s; detail.textContent = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}); }
+  else status.textContent = s;
+}
 
 const authModal = document.getElementById('authModal');
 const authSubmit = document.getElementById('authSubmit');
@@ -91,6 +138,7 @@ authSubmit.addEventListener('click', async () => {
     const data = await res.json();
     setStatus('Registered id='+data.id);
     localStorage.setItem('tourist_user_id', data.id);
+    syncTouristSession();
     authModal.style.display = 'none';
   } else if (mode === 'login'){
     try{
@@ -100,6 +148,7 @@ authSubmit.addEventListener('click', async () => {
       if (!res.ok){ setStatus('Login failed: '+(data&&data.detail?data.detail:txt)); return }
       setStatus('Logged in');
       localStorage.setItem('tourist_token', data.access_token);
+      syncTouristSession();
       authModal.style.display = 'none';
     }catch(e){ setStatus('Login error: '+e.message) }
   }
@@ -115,6 +164,19 @@ async function sendTelemetry(lat, lon){
     try{ const j = await res.json(); setStatus('Telemetry error: '+(j.detail||res.statusText)); } catch(e){ setStatus('Telemetry error: '+res.statusText); }
   }
 }
+
+function syncTouristSession(){
+  const loggedIn = Boolean(localStorage.getItem('tourist_token') || localStorage.getItem('tourist_user_id'));
+  document.getElementById('loginBtn').hidden = loggedIn;
+  document.getElementById('registerBtn').hidden = loggedIn;
+  document.getElementById('touristSession').hidden = !loggedIn;
+}
+syncTouristSession();
+document.getElementById('touristSessionBtn')?.addEventListener('click', () => {
+  const menu = document.getElementById('touristSessionMenu'); menu.hidden = !menu.hidden;
+  document.getElementById('touristSessionBtn').setAttribute('aria-expanded', String(!menu.hidden));
+});
+document.getElementById('touristLogout')?.addEventListener('click', () => { localStorage.removeItem('tourist_token'); localStorage.removeItem('tourist_user_id'); syncTouristSession(); document.getElementById('touristSessionMenu').hidden = true; setStatus('Signed out'); });
 
 document.getElementById('startTelemetry').onclick = async () => {
   if (navigator.geolocation){
@@ -141,6 +203,7 @@ document.getElementById('stopTelemetry').onclick = () => {
 
 // small helper: browser notification (asks permission on first use)
 function notify(title, body){
+  addTouristNotification(title, body, title.toLowerCase().includes('sos') || title.toLowerCase().includes('risk') ? 'alert' : 'warning');
   try{
     if (window.Notification && Notification.permission !== 'granted') Notification.requestPermission();
     if (window.Notification && Notification.permission === 'granted') new Notification(title, {body});

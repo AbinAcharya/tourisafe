@@ -5,29 +5,47 @@
     <title>Tourisafe Admin Dashboard</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
     <style>html,body,#map{height:100%;margin:0;padding:0} #controls{position:absolute;top:10px;left:10px;z-index:1000;background:white;padding:8px;border-radius:6px}</style>
   </head>
   <body>
     <header class="topbar">
       <div class="brand"><img src="/static/logo.svg" alt="Tourisafe" class="logo-img">Tourisafe</div>
-      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
-        <div class="small-muted">Admin Dashboard</div>
+      <div class="topbar-actions">
+        <div class="small-muted"><span class="live-dot"></span>Operations center</div>
         <div class="controls">
-          <button id="adminLoginBtn" class="ghost">Admin Login</button>
+          <button id="adminLoginBtn" class="ghost"><span class="button-icon">&#8594;</span> Admin Login</button>
+          <div class="session-menu" id="adminSession" hidden>
+            <button id="adminSessionBtn" class="session-button" aria-expanded="false"><span class="avatar">A</span><span>Admin</span><span class="chevron">&#8964;</span></button>
+            <div class="session-dropdown" id="adminSessionMenu" hidden><button id="adminLogout" class="dropdown-action">Sign out</button></div>
+          </div>
+          <button id="adminNotifications" class="icon-button" aria-label="Open notifications" title="Notifications"><span>&#128276;</span><b id="adminNotificationCount" hidden>0</b></button>
         </div>
       </div>
     </header>
     <main class="map-wrap">
       <div id="map"></div>
-      <aside class="sidebar">
-          <div class="card">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><strong>Active Incidents</strong><a class="small-muted" href="/api/incidents">API</a></div>
-            <div id="incidentList" class="list status">No incidents yet</div>
-          </div>
+      <div class="map-toolbar" aria-label="Map controls">
+        <button id="adminZoomIn" class="map-tool" aria-label="Zoom in" title="Zoom in">+</button>
+        <button id="adminZoomOut" class="map-tool" aria-label="Zoom out" title="Zoom out">&#8722;</button>
+        <span class="toolbar-rule"></span>
+        <button id="adminResetView" class="map-tool map-tool-wide" aria-label="Reset map view" title="Reset map view">&#9678;</button>
+        <button id="adminFullscreen" class="map-tool map-tool-wide" aria-label="Toggle fullscreen map" title="Toggle fullscreen map">&#9974;</button>
+      </div>
+      <button id="incidentToggle" class="incident-toggle" aria-expanded="false"><span class="incident-toggle-icon">!</span><span><strong>Active incidents</strong><small><b id="incidentCount">0</b> requiring attention</small></span><span class="chevron">&#8964;</span></button>
+      <aside class="incident-popup" id="incidentPopup" hidden>
+        <div class="card incident-card">
+          <div class="card-heading"><div><span class="section-kicker">Live response</span><strong>Active incidents</strong></div><button id="clearIncidents" class="text-button danger-text">Clear all</button></div>
+          <div id="incidentList" class="list status">No incidents yet</div>
+          <a class="small-muted panel-link" href="/api/incidents">View incident API</a>
+        </div>
       </aside>
     </main>
+    <aside class="notification-drawer" id="adminNotificationDrawer" aria-label="Notifications" hidden>
+      <div class="drawer-heading"><div><span class="section-kicker">Activity</span><strong>Notifications</strong></div><button id="adminClearNotifications" class="text-button">Clear</button></div>
+      <div id="adminNotificationList" class="notification-list"><div class="empty-state">No new activity</div></div>
+    </aside>
       <!-- Incident details modal -->
       <div id="incidentModal" class="modal-backdrop" style="display:none">
         <div class="modal">
@@ -62,7 +80,7 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
-    <link rel="stylesheet" href="/static/styles.css?v=1">
-    <script src="/static/admin.js?v=2"></script>
+    <link rel="stylesheet" href="/static/styles.css?v=3">
+    <script src="/static/admin.js?v=5"></script>
   </body>
 </html>

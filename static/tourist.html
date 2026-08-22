@@ -5,31 +5,49 @@
     <title>Tourist - Tourisafe</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
     <style>html,body,#map{height:70%;margin:0;padding:0} #panel{padding:8px}</style>
   </head>
   <body>
     <header class="topbar">
       <div class="brand"><img src="/static/logo.svg" alt="Tourisafe" class="logo-img">Tourisafe</div>
-      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
-        <div class="small-muted">Personal Safety • Tourist View</div>
+      <div class="topbar-actions">
+        <div class="small-muted"><span class="live-dot live-dot-safe"></span>Personal safety</div>
         <div class="controls">
-          <button id="registerBtn" class="ghost">Register</button>
-          <button id="loginBtn" class="ghost">Login</button>
-          <button id="startTelemetry" class="primary">Start</button>
-          <button id="stopTelemetry" class="ghost" disabled>Stop</button>
+          <button id="registerBtn" class="ghost">Create account</button>
+          <button id="loginBtn" class="ghost">Sign in</button>
+          <button id="startTelemetry" class="primary"><span class="button-icon">&#9673;</span> Start tracking</button>
+          <button id="stopTelemetry" class="ghost" disabled>Stop tracking</button>
+          <div class="session-menu" id="touristSession" hidden>
+            <button id="touristSessionBtn" class="session-button" aria-expanded="false"><span class="avatar">T</span><span>Tourist</span><span class="chevron">&#8964;</span></button>
+            <div class="session-dropdown" id="touristSessionMenu" hidden><button id="touristLogout" class="dropdown-action">Sign out</button></div>
+          </div>
+          <button id="touristNotifications" class="icon-button" aria-label="Open notifications" title="Notifications"><span>&#128276;</span><b id="touristNotificationCount" hidden>0</b></button>
         </div>
       </div>
     </header>
     <main class="map-wrap">
       <div id="map"></div>
-      <div style="position:absolute;left:16px;bottom:16px;z-index:1000">
-        <div class="panel status" id="status">Status: idle</div>
+      <div class="map-toolbar" aria-label="Map controls">
+        <button id="touristZoomIn" class="map-tool" aria-label="Zoom in" title="Zoom in">+</button>
+        <button id="touristZoomOut" class="map-tool" aria-label="Zoom out" title="Zoom out">&#8722;</button>
+        <span class="toolbar-rule"></span>
+        <button id="touristLocate" class="map-tool map-tool-wide" aria-label="Use my location" title="Use my location">&#9678;</button>
+        <button id="touristResetView" class="map-tool map-tool-wide" aria-label="Reset map view" title="Reset map view">&#8962;</button>
+        <button id="touristFullscreen" class="map-tool map-tool-wide" aria-label="Toggle fullscreen map" title="Toggle fullscreen map">&#9974;</button>
       </div>
+      <div class="status-wrap">
+        <div class="panel status" id="status"><span class="status-indicator"></span><span><strong>Ready when you are</strong><small>Location tracking is off</small></span></div>
+      </div>
+      <div class="safety-timeline" id="safetyTimeline"><span class="section-kicker">Safety timeline</span><div class="timeline-list" id="timelineList"><div class="timeline-item"><span></span><p><strong>Ready to track</strong><small>Start location sharing when you are ready</small></p></div></div></div>
     </main>
+    <aside class="notification-drawer" id="touristNotificationDrawer" aria-label="Notifications" hidden>
+      <div class="drawer-heading"><div><span class="section-kicker">Safety feed</span><strong>Notifications</strong></div><button id="touristClearNotifications" class="text-button">Clear</button></div>
+      <div id="touristNotificationList" class="notification-list"><div class="empty-state">No new activity</div></div>
+    </aside>
     <!-- Floating SOS button -->
-    <button id="sosBtn" class="fab-sos" title="Send SOS">SOS</button>
+    <button id="sosBtn" class="fab-sos" title="Send SOS"><span class="sos-ring"></span><span>SOS</span><small>Emergency</small></button>
     <!-- Auth modal -->
     <div id="authModal" class="modal-backdrop" style="display:none">
       <div class="modal">
@@ -40,8 +58,8 @@
         <div class="actions"><button id="authCancel" class="ghost">Cancel</button><button id="authSubmit" class="primary">Submit</button></div>
       </div>
     </div>
-    <link rel="stylesheet" href="/static/styles.css?v=1">
+    <link rel="stylesheet" href="/static/styles.css?v=2">
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="/static/tourist.js?v=2"></script>
+    <script src="/static/tourist.js?v=3"></script>
   </body>
 </html>

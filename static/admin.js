@@ -1,10 +1,64 @@
-const map = L.map('map').setView([20.5937,78.9629], 5);
+const map = L.map('map', {zoomControl: false, scrollWheelZoom: true, keyboard: true}).setView([20.5937,78.9629], 5);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
 }).addTo(map);
 
 let fencesLayer = L.geoJSON().addTo(map);
 let incidentsLayer = L.layerGroup().addTo(map);
+let touristLocationsLayer = L.layerGroup().addTo(map);
+const touristMarkers = new Map();
+const defaultView = [20.5937, 78.9629];
+
+function setupMapControls(){
+    document.getElementById('adminZoomIn')?.addEventListener('click', () => map.zoomIn());
+    document.getElementById('adminZoomOut')?.addEventListener('click', () => map.zoomOut());
+    document.getElementById('adminResetView')?.addEventListener('click', () => map.setView(defaultView, 5));
+    document.getElementById('adminFullscreen')?.addEventListener('click', () => document.querySelector('.map-wrap')?.requestFullscreen?.());
+}
+setupMapControls();
+
+const incidentToggle = document.getElementById('incidentToggle');
+const incidentPopup = document.getElementById('incidentPopup');
+incidentToggle?.addEventListener('click', () => {
+    incidentPopup.hidden = !incidentPopup.hidden;
+    incidentToggle.setAttribute('aria-expanded', String(!incidentPopup.hidden));
+});
+document.addEventListener('click', (event) => {
+    if (incidentPopup && !incidentPopup.hidden && !incidentPopup.contains(event.target) && !incidentToggle.contains(event.target)) {
+        incidentPopup.hidden = true;
+        incidentToggle.setAttribute('aria-expanded', 'false');
+    }
+});
+
+document.getElementById('clearIncidents')?.addEventListener('click', async () => {
+    if (!confirm('Clear all saved incidents? This cannot be undone.')) return;
+    const token = localStorage.getItem('admin_token');
+    if (!token) { alert('Please login as admin first'); return; }
+    const response = await fetch('/admin/incidents', {method: 'DELETE', headers: {'Authorization': 'Bearer ' + token}});
+    if (!response.ok) { alert('Could not clear incidents'); return; }
+    Object.keys(localStorage).filter(key => key.startsWith('incident_triage_')).forEach(key => localStorage.removeItem(key));
+    await loadIncidents();
+    addAdminNotification('Incident queue cleared', 'All saved incidents were removed', 'warning');
+});
+
+const adminNotificationStore = JSON.parse(localStorage.getItem('admin_notifications') || '[]');
+function addAdminNotification(title, body, tone='warning'){
+    adminNotificationStore.unshift({title, body, tone, time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})});
+    adminNotificationStore.splice(12);
+    localStorage.setItem('admin_notifications', JSON.stringify(adminNotificationStore));
+    renderAdminNotifications();
+}
+function renderAdminNotifications(){
+    const list = document.getElementById('adminNotificationList');
+    const count = document.getElementById('adminNotificationCount');
+    if (!list || !count) return;
+    count.hidden = !adminNotificationStore.length;
+    count.textContent = adminNotificationStore.length;
+    list.innerHTML = adminNotificationStore.length ? adminNotificationStore.map(n => `<div class="notification-item ${n.tone}"><strong>${n.title}</strong><small>${n.body} · ${n.time}</small></div>`).join('') : '<div class="empty-state">No new activity</div>';
+}
+renderAdminNotifications();
+document.getElementById('adminNotifications')?.addEventListener('click', () => { const drawer = document.getElementById('adminNotificationDrawer'); drawer.hidden = !drawer.hidden; });
+document.getElementById('adminClearNotifications')?.addEventListener('click', () => { adminNotificationStore.splice(0); localStorage.setItem('admin_notifications', '[]'); renderAdminNotifications(); });
 // WebSocket for realtime updates
 try{
     const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
@@ -14,9 +68,26 @@ try{
             const msg = JSON.parse(ev.data);
             if (msg.type === 'incident_created'){
                 L.marker([msg.lat, msg.lon]).bindPopup(msg.description || 'Incident').addTo(incidentsLayer);
+                addAdminNotification('New SOS incident', msg.description || 'An incident was reported nearby', 'alert');
+                loadIncidents();
             }
             if (msg.type === 'telemetry_anomaly'){
                 L.circle([msg.lat, msg.lon], {radius:50, color:'orange'}).addTo(map);
+                addAdminNotification('Telemetry anomaly', `User ${msg.user_id} reported unusual speed`, 'warning');
+            }
+            if (msg.type === 'telemetry_update'){
+                const key = msg.user_id ?? 'anonymous';
+                let touristMarker = touristMarkers.get(key);
+                if (!touristMarker){
+                    touristMarker = L.marker([msg.lat, msg.lon]).addTo(touristLocationsLayer);
+                    touristMarkers.set(key, touristMarker);
+                } else {
+                    touristMarker.setLatLng([msg.lat, msg.lon]);
+                }
+                touristMarker.bindPopup(`<strong>Tourist location</strong><br>User: ${msg.user_id ?? 'anonymous'}<br>Updated: ${new Date(msg.timestamp).toLocaleTimeString()}`);
+            }
+            if (msg.type === 'fence_created'){
+                addAdminNotification('New safety fence', `${msg.name} · ${msg.fence_type}`, 'warning');
             }
         }catch(e){console.error(e)}
     }
@@ -74,6 +145,8 @@ map.on(L.Draw.Event.DELETED, function (event) {
 const elAdminLogin = document.getElementById('adminLoginBtn');
 function syncAdminLoginButton(){
     if (elAdminLogin) elAdminLogin.style.display = localStorage.getItem('admin_token') ? 'none' : '';
+    const session = document.getElementById('adminSession');
+    if (session) session.hidden = !localStorage.getItem('admin_token');
 }
 syncAdminLoginButton();
 if (elAdminLogin) elAdminLogin.onclick = () => { document.getElementById('adminModal').style.display = 'flex'; };
@@ -96,6 +169,12 @@ if (elAdminSubmit) elAdminSubmit.onclick = async () => {
         alert('Admin login successful');
     }catch(e){ console.error(e); alert('Login error: '+e.message) }
 };
+document.getElementById('adminSessionBtn')?.addEventListener('click', () => {
+    const menu = document.getElementById('adminSessionMenu');
+    menu.hidden = !menu.hidden;
+    document.getElementById('adminSessionBtn').setAttribute('aria-expanded', String(!menu.hidden));
+});
+document.getElementById('adminLogout')?.addEventListener('click', () => { localStorage.removeItem('admin_token'); syncAdminLoginButton(); document.getElementById('adminSessionMenu').hidden = true; });
 
 // Admin register/reset UI removed — these actions are available via API/scripts
 
@@ -120,11 +199,13 @@ async function loadIncidents(){
     });
     // populate sidebar incident list
     const list = document.getElementById('incidentList');
-    if (!data.length) { list.innerHTML = 'No incidents yet'; return }
+    document.getElementById('incidentCount').textContent = data.length;
+    if (!data.length) { list.innerHTML = '<div class="empty-state">No active incidents</div>'; return }
     list.innerHTML = '';
     data.forEach(i => {
         const el = document.createElement('div'); el.className = 'list-item';
-        el.innerHTML = `<div class="incident-title">Incident #${i.id}</div><div class="incident-meta">${i.desc || ''} • ${i.ts}</div>`;
+        const triage = localStorage.getItem(`incident_triage_${i.id}`) || 'New';
+        el.innerHTML = `<div class="incident-title">Incident #${i.id}<span class="triage-badge ${triage.toLowerCase()}">${triage}</span></div><div class="incident-meta">${i.desc || ''} · ${i.ts}</div>`;
         el.style.cursor = 'pointer';
         el.onclick = () => { showIncident(i); };
         list.appendChild(el);
@@ -134,9 +215,7 @@ async function loadIncidents(){
 function showIncident(i){
     const container = document.getElementById('incidentDetails');
     container.innerHTML = '';
-    const rows = [
-        ['ID', i.id], ['Description', i.desc || ''], ['Status', i.status || ''], ['Timestamp', i.ts || ''], ['Latitude', i.lat], ['Longitude', i.lon]
-    ];
+    const rows = [['ID', i.id], ['Description', i.desc || ''], ['Status', i.status || ''], ['Timestamp', i.ts || ''], ['Latitude', i.lat], ['Longitude', i.lon]];
     const table = document.createElement('div');
     table.style.display = 'grid';
     table.style.gridTemplateColumns = '120px 1fr';
@@ -147,6 +226,13 @@ function showIncident(i){
         table.appendChild(k); table.appendChild(v);
     });
     container.appendChild(table);
+    const triage = document.createElement('label');
+    triage.className = 'triage-control';
+    triage.innerHTML = '<span>Operator triage</span><select><option>New</option><option>Acknowledged</option><option>Resolved</option></select>';
+    const select = triage.querySelector('select');
+    select.value = localStorage.getItem(`incident_triage_${i.id}`) || 'New';
+    select.onchange = () => { localStorage.setItem(`incident_triage_${i.id}`, select.value); loadIncidents(); };
+    container.appendChild(triage);
     document.getElementById('incidentModal').style.display = 'flex';
 }
 

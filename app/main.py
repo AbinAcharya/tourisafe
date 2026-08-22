@@ -72,7 +72,7 @@ def generate_tourist_id(user: models.User = Depends(auth.get_current_user), db: 
 
 
 @app.post("/fences")
-def create_fence(fence: schemas.FenceCreate, user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+async def create_fence(fence: schemas.FenceCreate, user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
     if not user.is_admin:
         raise HTTPException(status_code=403, detail="Admin required")
     geojson_text = json.dumps(fence.geojson)
@@ -106,7 +106,7 @@ def check_point(lat: float, lon: float, db: Session = Depends(get_db)):
 
 
 @app.post("/telemetry")
-def ingest_telemetry(payload: schemas.TelemetryIn, db: Session = Depends(get_db)):
+async def ingest_telemetry(payload: schemas.TelemetryIn, db: Session = Depends(get_db)):
     ts = None
     if payload.timestamp:
         try:
@@ -129,6 +129,13 @@ def ingest_telemetry(payload: schemas.TelemetryIn, db: Session = Depends(get_db)
         db.refresh(t)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Telemetry ingest error: {e}")
+
+    # broadcast the latest tourist location so the admin map stays live
+    try:
+        import asyncio
+        asyncio.create_task(manager.broadcast({"type": "telemetry_update", "user_id": t.user_id, "lat": t.lat, "lon": t.lon, "timestamp": t.timestamp.isoformat(), "speed": t.speed}))
+    except Exception:
+        pass
     
     # broadcast telemetry event if anomaly or simply to update map
     if t.speed and t.speed > 20:  # threshold m/s ~72 km/h
@@ -159,7 +166,7 @@ def ingest_telemetry(payload: schemas.TelemetryIn, db: Session = Depends(get_db)
 
 
 @app.post("/sos")
-def sos(payload: schemas.SOSIn, db: Session = Depends(get_db)):
+async def sos(payload: schemas.SOSIn, db: Session = Depends(get_db)):
     try:
         inc = models.Incident(user_id=payload.user_id, lat=payload.lat, lon=payload.lon, description=payload.description)
         db.add(inc)
@@ -182,6 +189,15 @@ def sos(payload: schemas.SOSIn, db: Session = Depends(get_db)):
 def get_incidents(db: Session = Depends(get_db)):
     incidents = db.query(models.Incident).order_by(models.Incident.timestamp.desc()).limit(200).all()
     return [{"id": i.id, "lat": i.lat, "lon": i.lon, "desc": i.description, "status": i.status, "ts": i.timestamp.isoformat()} for i in incidents]
+
+
+@app.delete("/admin/incidents")
+def clear_incidents(user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+    if not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin required")
+    deleted = db.query(models.Incident).delete(synchronize_session=False)
+    db.commit()
+    return {"deleted": deleted}
 
 
 @app.post('/admin/register')
