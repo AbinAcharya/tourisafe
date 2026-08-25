@@ -31,6 +31,10 @@ app.add_middleware(
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
+def record_audit(db: Session, user: models.User, action: str, entity_type: str, entity_id: int | None = None):
+    db.add(models.AuditLog(user_id=user.id, action=action, entity_type=entity_type, entity_id=entity_id))
+
+
 @app.post("/register")
 def register(username: str, email: str, password: str, db: Session = Depends(get_db)):
     try:
@@ -95,6 +99,35 @@ def list_fences(db: Session = Depends(get_db)):
     return [{"id": f.id, "name": f.name, "fence_type": f.fence_type, "geojson": json.loads(f.geojson)} for f in fences]
 
 
+@app.delete("/admin/fences")
+async def delete_all_fences(user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+    if not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin required")
+    fences = db.query(models.GeoFence).filter(models.GeoFence.active == True).all()
+    fence_ids = [f.id for f in fences]
+    for fence in fences:
+        record_audit(db, user, "delete", "fence", fence.id)
+        db.delete(fence)
+    deleted = len(fences)
+    db.commit()
+    await manager.broadcast({"type": "fences_deleted", "ids": fence_ids})
+    return {"deleted": deleted}
+
+
+@app.delete("/admin/fences/{fence_id}")
+async def delete_fence(fence_id: int, user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+    if not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin required")
+    fence = db.query(models.GeoFence).filter(models.GeoFence.id == fence_id).first()
+    if not fence:
+        raise HTTPException(status_code=404, detail="Fence not found")
+    db.delete(fence)
+    record_audit(db, user, "delete", "fence", fence_id)
+    db.commit()
+    await manager.broadcast({"type": "fence_deleted", "id": fence_id})
+    return {"deleted": fence_id}
+
+
 @app.get("/check_point")
 def check_point(lat: float, lon: float, db: Session = Depends(get_db)):
     fences = db.query(models.GeoFence).filter(models.GeoFence.active == True).all()
@@ -151,8 +184,8 @@ async def ingest_telemetry(payload: schemas.TelemetryIn, db: Session = Depends(g
         if fencing.point_in_geojson(f.geojson, t.lat, t.lon):
             if f.fence_type == "restricted":
                 flags.append({"fence": f.name, "type": f.fence_type})
-            # notify when entering high-risk fences
-            if f.fence_type == "high-risk":
+            # notify when entering restricted or high-risk fences
+            if f.fence_type in {"restricted", "high-risk"}:
                 flags.append({"fence": f.name, "type": f.fence_type})
                 try:
                     import asyncio
@@ -191,13 +224,45 @@ def get_incidents(db: Session = Depends(get_db)):
     return [{"id": i.id, "lat": i.lat, "lon": i.lon, "desc": i.description, "status": i.status, "ts": i.timestamp.isoformat()} for i in incidents]
 
 
+@app.patch("/admin/incidents/{incident_id}")
+def update_incident(incident_id: int, payload: dict, user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+    if not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin required")
+    incident = db.query(models.Incident).filter(models.Incident.id == incident_id).first()
+    if not incident:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    status_value = payload.get("status")
+    if status_value not in {"open", "acknowledged", "resolved"}:
+        raise HTTPException(status_code=400, detail="Invalid incident status")
+    incident.status = status_value
+    record_audit(db, user, f"status:{status_value}", "incident", incident_id)
+    db.commit()
+    return {"id": incident.id, "status": incident.status}
+
+
 @app.delete("/admin/incidents")
 def clear_incidents(user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
     if not user.is_admin:
         raise HTTPException(status_code=403, detail="Admin required")
     deleted = db.query(models.Incident).delete(synchronize_session=False)
+    record_audit(db, user, "clear", "incidents", deleted)
     db.commit()
     return {"deleted": deleted}
+
+
+@app.get("/admin/me")
+def admin_me(user: models.User = Depends(auth.get_current_user)):
+    if not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin required")
+    return {"id": user.id, "username": user.username, "email": user.email, "is_admin": user.is_admin}
+
+
+@app.get("/admin/audit")
+def get_audit(user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+    if not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin required")
+    logs = db.query(models.AuditLog).order_by(models.AuditLog.created_at.desc()).limit(100).all()
+    return [{"id": log.id, "action": log.action, "entity_type": log.entity_type, "entity_id": log.entity_id, "created_at": log.created_at.isoformat()} for log in logs]
 
 
 @app.post('/admin/register')

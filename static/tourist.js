@@ -2,6 +2,7 @@ const map = L.map('map', {zoomControl: false, scrollWheelZoom: true, keyboard: t
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19}).addTo(map);
 
 let marker = null;
+let accuracyCircle = null;
 let watchId = null;
 let telemetryInterval = null;
 let fencesLayer = L.geoJSON().addTo(map);
@@ -18,6 +19,67 @@ function setupMapControls(){
   });
 }
 setupMapControls();
+
+const body = document.body;
+const contacts = JSON.parse(localStorage.getItem('tourist_contacts') || '[]');
+const settings = JSON.parse(localStorage.getItem('tourist_settings') || '{}');
+const tripState = JSON.parse(localStorage.getItem('tourist_trip') || '{"active":false,"startedAt":null}');
+let alertTimeout = null;
+function setTouristAlert(title, message, tone='alert'){
+  const banner = document.getElementById('touristAlertBanner');
+  banner.className = `safety-alert-banner ${tone}`;
+  document.getElementById('touristAlertTitle').textContent = title;
+  document.getElementById('touristAlertBody').textContent = message;
+  banner.hidden = false;
+  clearTimeout(alertTimeout);
+  alertTimeout = setTimeout(() => { banner.hidden = true; }, 12000);
+}
+function updateTripUI(){
+  const button = document.getElementById('tripCheckIn');
+  if (!button) return;
+  button.textContent = tripState.active ? 'End trip' : 'Start trip';
+  document.getElementById('tripShare').textContent = tripState.active ? 'Copy trip link' : 'Share trip';
+}
+updateTripUI();
+document.getElementById('dismissTouristAlert')?.addEventListener('click', () => { document.getElementById('touristAlertBanner').hidden = true; });
+document.getElementById('tripCheckIn')?.addEventListener('click', () => { tripState.active = !tripState.active; tripState.startedAt = tripState.active ? new Date().toISOString() : null; localStorage.setItem('tourist_trip', JSON.stringify(tripState)); updateTripUI(); setTouristAlert(tripState.active ? 'Trip check-in active' : 'Trip ended', tripState.active ? 'Your safety session is ready.' : 'Your session has been closed.', 'notice'); });
+document.getElementById('tripShare')?.addEventListener('click', async () => { const text = `Tourisafe trip status: ${tripState.active ? 'active' : 'not active'}`; if (navigator.share) await navigator.share({title:'Tourisafe trip', text}); else { await navigator.clipboard?.writeText(text); setTouristAlert('Trip status copied', 'Share it with someone you trust.', 'notice'); } });
+function applySettings(){
+  body.classList.toggle('large-text', Boolean(settings.largeText));
+  document.getElementById('largeTextToggle').checked = Boolean(settings.largeText);
+  document.getElementById('darkMapToggle').checked = Boolean(settings.darkMap);
+  document.getElementById('languageSelect').value = settings.language || 'English';
+  document.getElementById('map').classList.toggle('map-dark', Boolean(settings.darkMap));
+}
+function updateContactSummary(){
+  const summary = document.getElementById('contactSummary');
+  if (summary) summary.textContent = contacts.length ? `${contacts.length} contact${contacts.length === 1 ? '' : 's'} saved` : 'No contacts saved';
+}
+function renderContacts(){
+  const list = document.getElementById('contactsList');
+  if (!list) return;
+  list.innerHTML = contacts.length ? contacts.map((contact, index) => `<div class="contact-card"><span><strong>${contact.name}</strong><small>${contact.phone}</small></span><a href="tel:${encodeURIComponent(contact.phone)}" aria-label="Call ${contact.name}">&#9742;</a><button class="contact-remove" data-contact-index="${index}" aria-label="Remove ${contact.name}">&times;</button></div>`).join('') : '<div class="empty-state">Add someone you trust.</div>';
+  list.querySelectorAll('.contact-remove').forEach(button => button.addEventListener('click', () => { contacts.splice(Number(button.dataset.contactIndex), 1); localStorage.setItem('tourist_contacts', JSON.stringify(contacts)); renderContacts(); updateContactSummary(); }));
+}
+applySettings();
+updateContactSummary();
+document.getElementById('touristSettings')?.addEventListener('click', () => { const drawer = document.getElementById('touristUtilityDrawer'); drawer.hidden = !drawer.hidden; });
+document.getElementById('closeUtility')?.addEventListener('click', () => { document.getElementById('touristUtilityDrawer').hidden = true; });
+document.getElementById('touristLegend')?.addEventListener('click', () => { document.getElementById('touristLegendPanel').hidden = false; });
+document.getElementById('closeLegend')?.addEventListener('click', () => { document.getElementById('touristLegendPanel').hidden = true; });
+document.getElementById('largeTextToggle')?.addEventListener('change', event => { settings.largeText = event.target.checked; localStorage.setItem('tourist_settings', JSON.stringify(settings)); applySettings(); });
+document.getElementById('darkMapToggle')?.addEventListener('change', event => { settings.darkMap = event.target.checked; localStorage.setItem('tourist_settings', JSON.stringify(settings)); applySettings(); });
+document.getElementById('languageSelect')?.addEventListener('change', event => { settings.language = event.target.value; localStorage.setItem('tourist_settings', JSON.stringify(settings)); });
+document.getElementById('nearbyHelp')?.addEventListener('click', () => {
+  const query = marker ? `${marker.getLatLng().lat},${marker.getLatLng().lng}` : 'hospitals police pharmacies near me';
+  window.open(`https://www.google.com/maps/search/${encodeURIComponent(`hospitals police pharmacies near ${query}`)}`, '_blank', 'noopener');
+});
+document.getElementById('trustedContacts')?.addEventListener('click', () => { renderContacts(); document.getElementById('contactsModal').hidden = false; });
+document.getElementById('contactsClose')?.addEventListener('click', () => { document.getElementById('contactsModal').hidden = true; });
+document.getElementById('contactAdd')?.addEventListener('click', () => { const name = document.getElementById('contactName').value.trim(); const phone = document.getElementById('contactPhone').value.trim(); if (!name || !phone) return; contacts.push({name, phone}); localStorage.setItem('tourist_contacts', JSON.stringify(contacts)); document.getElementById('contactName').value = ''; document.getElementById('contactPhone').value = ''; renderContacts(); updateContactSummary(); });
+window.addEventListener('online', () => { body.classList.remove('offline'); document.getElementById('statusMetrics').textContent = 'Online'; });
+window.addEventListener('offline', () => { body.classList.add('offline'); document.getElementById('statusMetrics').textContent = 'Offline'; setStatus('Connection lost'); });
+if (!navigator.onLine) body.classList.add('offline');
 
 const touristNotificationStore = JSON.parse(localStorage.getItem('tourist_notifications') || '[]');
 function addTouristNotification(title, body, tone='warning'){
@@ -66,19 +128,27 @@ try{
       if (msg.type === 'fence_created'){
         // add to fences layer
         const g = L.geoJSON(msg.geojson, {style: {color: msg.fence_type === 'restricted' ? 'red' : (msg.fence_type === 'high-risk' ? 'orange' : 'green')}}).addTo(fencesLayer);
-        // if current user location exists and inside, notify if high-risk
-        if (marker && msg.fence_type === 'high-risk'){
+        // if current user location exists and inside, notify immediately
+        if (marker && (msg.fence_type === 'restricted' || msg.fence_type === 'high-risk')){
           const p = [marker.getLatLng().lat, marker.getLatLng().lng];
           if (pointInPolygon(p, msg.geojson)){
-            notify('High-risk area', `You are inside high-risk area: ${msg.name}`);
-            setStatus('Entered high-risk area: '+msg.name);
+            const label = msg.fence_type === 'high-risk' ? 'High-risk area' : 'Restricted area';
+            notify(label, `You are inside ${msg.fence_type} area: ${msg.name}`);
+            setStatus('Entered '+msg.fence_type+' area: '+msg.name);
           }
         }
       }
+      if (msg.type === 'fence_deleted' || msg.type === 'fences_deleted'){
+        loadFences();
+      }
       if (msg.type === 'fence_alert'){
-        // server detected a user inside a high-risk fence
-        notify('High-risk alert', `Entered ${msg.fence}`);
-        setStatus('High-risk alert: '+msg.fence);
+        // server detected a user inside a restricted or high-risk fence
+        const label = msg.fence_type === 'restricted' ? 'Restricted area' : 'High-risk area';
+        notify(label, `Entered ${msg.fence}`);
+        setStatus(label+': '+msg.fence);
+        document.getElementById('touristSafetyScore').textContent = msg.fence_type === 'restricted' ? 'Restricted' : 'High risk';
+        document.getElementById('touristSafetyDetail').textContent = msg.fence;
+        setTouristAlert(label, `You entered ${msg.fence}`, 'alert');
         L.circle([msg.lat, msg.lon], {radius:50, color:'red'}).addTo(map);
       }
     }catch(e){ console.error(e) }
@@ -180,13 +250,18 @@ document.getElementById('touristLogout')?.addEventListener('click', () => { loca
 
 document.getElementById('startTelemetry').onclick = async () => {
   if (navigator.geolocation){
-    watchId = navigator.geolocation.watchPosition(async (pos)=>{
+    setStatus('Requesting location...');
+    watchId = navigator.geolocation.watchPosition(async (pos) => {
       const lat = pos.coords.latitude, lon = pos.coords.longitude;
       if (marker) marker.setLatLng([lat,lon]); else marker = L.marker([lat,lon]).addTo(map);
+      if (accuracyCircle) accuracyCircle.setLatLng([lat, lon]).setRadius(pos.coords.accuracy || 0);
+      else accuracyCircle = L.circle([lat, lon], {radius: pos.coords.accuracy || 0, color:'#2878c8', fillColor:'#2878c8', fillOpacity:.08, weight:1}).addTo(map);
       map.setView([lat,lon], 15);
       await sendTelemetry(lat, lon);
-      setStatus('Telemetry sent: '+lat.toFixed(5)+','+lon.toFixed(5));
-    }, err => setStatus('geo error:'+err.message), {enableHighAccuracy:true});
+      body.classList.add('tracking-active');
+      document.getElementById('statusMetrics').textContent = `${Math.round(pos.coords.accuracy || 0)}m accuracy`;
+      setStatus('Location sharing active');
+    }, err => { body.classList.remove('tracking-active'); setStatus(err.code === 1 ? 'Location permission needed' : 'Location unavailable'); }, {enableHighAccuracy:true});
   } else {
     setStatus('Geolocation not available');
   }
@@ -197,6 +272,8 @@ document.getElementById('startTelemetry').onclick = async () => {
 document.getElementById('stopTelemetry').onclick = () => {
   if (watchId) { navigator.geolocation.clearWatch(watchId); watchId = null; }
   setStatus('Stopped telemetry');
+  body.classList.remove('tracking-active');
+  document.getElementById('statusMetrics').textContent = navigator.onLine ? 'Online' : 'Offline';
   document.getElementById('startTelemetry').disabled = false;
   document.getElementById('stopTelemetry').disabled = true;
 }
@@ -236,15 +313,54 @@ function pointInPolygon(point, geojson){
   return false;
 }
 
-document.getElementById('sosBtn').onclick = async () => {
+let sosHoldTimer = null;
+let sosStartedAt = 0;
+const sosModal = document.getElementById('sosModal');
+const sosConfirm = document.getElementById('sosConfirm');
+const sosProgress = document.getElementById('sosHoldProgress');
+function openSosModal(){
+  if (!marker){ setStatus('Start tracking before sending an SOS'); return; }
+  sosModal.hidden = false;
+  sosConfirm.disabled = true;
+  sosConfirm.textContent = 'Press and hold for 3 seconds';
+  sosProgress.style.width = '0%';
+}
+function startSosHold(){
+  sosStartedAt = Date.now();
+  sosConfirm.disabled = true;
+  clearInterval(sosHoldTimer);
+  sosHoldTimer = setInterval(() => {
+    const progress = Math.min(100, ((Date.now() - sosStartedAt) / 3000) * 100);
+    sosProgress.style.width = `${progress}%`;
+    if (progress >= 100){ clearInterval(sosHoldTimer); sosConfirm.disabled = false; sosConfirm.textContent = 'Release to send SOS'; }
+  }, 50);
+}
+function stopSosHold(){ if (sosConfirm.disabled){ clearInterval(sosHoldTimer); sosProgress.style.width = '0%'; } }
+document.getElementById('sosBtn').onclick = openSosModal;
+sosConfirm.addEventListener('pointerdown', startSosHold);
+sosConfirm.addEventListener('pointerup', stopSosHold);
+sosConfirm.addEventListener('pointerleave', stopSosHold);
+sosConfirm.addEventListener('pointercancel', stopSosHold);
+sosConfirm.addEventListener('keydown', event => {
+  if ((event.key === ' ' || event.key === 'Enter') && !event.repeat) { event.preventDefault(); startSosHold(); }
+});
+sosConfirm.addEventListener('keyup', event => {
+  if (event.key === ' ' || event.key === 'Enter') { event.preventDefault(); stopSosHold(); }
+});
+document.getElementById('sosCancel').onclick = () => { clearInterval(sosHoldTimer); sosModal.hidden = true; sosConfirm.textContent = 'Press and hold for 3 seconds'; };
+sosConfirm.onclick = async () => {
+  if (sosConfirm.disabled) return;
   let lat, lon;
   if (marker){ lat = marker.getLatLng().lat; lon = marker.getLatLng().lng; }
-  else { alert('please enable telemetry or allow location'); return }
+  else { sosModal.hidden = true; setStatus('Start tracking before sending an SOS'); return }
   const payload = { user_id: localStorage.getItem('tourist_user_id') ? Number(localStorage.getItem('tourist_user_id')) : null, lat, lon, description: 'SOS from tourist' };
   const headers = {'Content-Type':'application/json'}; const token = localStorage.getItem('tourist_token'); if (token) headers['Authorization']='Bearer '+token;
   const res = await fetch('/sos', {method:'POST', headers, body: JSON.stringify(payload)});
   if (!res.ok){ try{ const j = await res.json(); setStatus('SOS error: '+(j.detail||res.statusText)); }catch(e){ setStatus('SOS error: '+res.statusText); } return }
   const data = await res.json();
+  sosModal.hidden = true;
+  sosConfirm.textContent = 'Press and hold for 3 seconds';
+  sosProgress.style.width = '0%';
   setStatus('SOS sent: incident '+data.incident_id);
   notify('SOS sent', 'Incident '+data.incident_id);
-}
+};

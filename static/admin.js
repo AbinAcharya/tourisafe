@@ -8,6 +8,20 @@ let incidentsLayer = L.layerGroup().addTo(map);
 let touristLocationsLayer = L.layerGroup().addTo(map);
 const touristMarkers = new Map();
 const defaultView = [20.5937, 78.9629];
+let currentIncidents = [];
+let incidentFilter = 'all';
+let incidentSearch = '';
+const touristLastSeen = new Map();
+
+function showToast(message){
+    const region = document.getElementById('toastRegion');
+    if (!region) return;
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.textContent = message;
+    region.appendChild(toast);
+    setTimeout(() => toast.remove(), 4000);
+}
 
 function setupMapControls(){
     document.getElementById('adminZoomIn')?.addEventListener('click', () => map.zoomIn());
@@ -22,6 +36,7 @@ const incidentPopup = document.getElementById('incidentPopup');
 incidentToggle?.addEventListener('click', () => {
     incidentPopup.hidden = !incidentPopup.hidden;
     incidentToggle.setAttribute('aria-expanded', String(!incidentPopup.hidden));
+    if (!incidentPopup.hidden) setAdminSidebarOpen(false);
 });
 document.addEventListener('click', (event) => {
     if (incidentPopup && !incidentPopup.hidden && !incidentPopup.contains(event.target) && !incidentToggle.contains(event.target)) {
@@ -33,9 +48,10 @@ document.addEventListener('click', (event) => {
 document.getElementById('clearIncidents')?.addEventListener('click', async () => {
     if (!confirm('Clear all saved incidents? This cannot be undone.')) return;
     const token = localStorage.getItem('admin_token');
-    if (!token) { alert('Please login as admin first'); return; }
+    if (!token) { document.getElementById('adminModal').style.display = 'flex'; return; }
     const response = await fetch('/admin/incidents', {method: 'DELETE', headers: {'Authorization': 'Bearer ' + token}});
-    if (!response.ok) { alert('Could not clear incidents'); return; }
+    if (response.status === 401 || response.status === 403) { localStorage.removeItem('admin_token'); syncAdminLoginButton(); document.getElementById('adminModal').style.display = 'flex'; return; }
+    if (!response.ok) { alert(`Could not clear incidents (${response.status})`); return; }
     Object.keys(localStorage).filter(key => key.startsWith('incident_triage_')).forEach(key => localStorage.removeItem(key));
     await loadIncidents();
     addAdminNotification('Incident queue cleared', 'All saved incidents were removed', 'warning');
@@ -77,6 +93,7 @@ try{
             }
             if (msg.type === 'telemetry_update'){
                 const key = msg.user_id ?? 'anonymous';
+                touristLastSeen.set(key, msg);
                 let touristMarker = touristMarkers.get(key);
                 if (!touristMarker){
                     touristMarker = L.marker([msg.lat, msg.lon]).addTo(touristLocationsLayer);
@@ -85,17 +102,20 @@ try{
                     touristMarker.setLatLng([msg.lat, msg.lon]);
                 }
                 touristMarker.bindPopup(`<strong>Tourist location</strong><br>User: ${msg.user_id ?? 'anonymous'}<br>Updated: ${new Date(msg.timestamp).toLocaleTimeString()}`);
+                renderTouristQueue();
             }
             if (msg.type === 'fence_created'){
                 addAdminNotification('New safety fence', `${msg.name} · ${msg.fence_type}`, 'warning');
             }
         }catch(e){console.error(e)}
     }
-}catch(e){console.warn('WebSocket failed', e)}
+    ws.onopen = () => setConnectionStatus('Live');
+    ws.onclose = () => setConnectionStatus('Offline');
+}catch(e){console.warn('WebSocket failed', e); setConnectionStatus('Offline')}
 // Add Leaflet.draw for drawing fences
 const drawnItems = new L.FeatureGroup();
 map.addLayer(drawnItems);
-const drawControl = new L.Control.Draw({ edit: { featureGroup: drawnItems }, draw: { polygon: true, polyline: false, rectangle: true, circle: false, marker: false, circlemarker: false } });
+const drawControl = new L.Control.Draw({ edit: { featureGroup: drawnItems, remove: false }, draw: { polygon: true, polyline: false, rectangle: true, circle: false, marker: false, circlemarker: false } });
 map.addControl(drawControl);
 
 map.on(L.Draw.Event.CREATED, function (event) {
@@ -134,13 +154,6 @@ map.on(L.Draw.Event.EDITED, function (event) {
     });
 });
 
-map.on(L.Draw.Event.DELETED, function (event) {
-    const layers = event.layers;
-    layers.eachLayer(function(layer){
-        alert('To delete a fence, use the fence list in the sidebar and delete by DB id.');
-    });
-});
-
 // Admin login via header button + modal
 const elAdminLogin = document.getElementById('adminLoginBtn');
 function syncAdminLoginButton(){
@@ -176,23 +189,115 @@ document.getElementById('adminSessionBtn')?.addEventListener('click', () => {
 });
 document.getElementById('adminLogout')?.addEventListener('click', () => { localStorage.removeItem('admin_token'); syncAdminLoginButton(); document.getElementById('adminSessionMenu').hidden = true; });
 
+function setConnectionStatus(value){
+    const metric = document.getElementById('metricConnection');
+    if (metric) metric.textContent = value;
+}
+function renderTouristQueue(){
+    const list = document.getElementById('touristQueue');
+    if (!list) return;
+    document.getElementById('metricTourists').textContent = touristLastSeen.size;
+    document.getElementById('touristLastSeen').textContent = touristLastSeen.size ? 'Receiving updates' : 'Waiting for signal';
+    list.innerHTML = touristLastSeen.size ? [...touristLastSeen.entries()].map(([key, item]) => `<div class="admin-queue-item" data-tourist-key="${key}"><strong>Tourist ${key}</strong><small>Last seen ${new Date(item.timestamp).toLocaleTimeString()} · ${item.speed ? `${Math.round(item.speed * 3.6)} km/h` : 'Stationary'}</small></div>`).join('') : '<div class="empty-state">No live locations yet</div>';
+    list.querySelectorAll('[data-tourist-key]').forEach(item => item.onclick = () => { const tourist = touristLastSeen.get(item.dataset.touristKey); if (tourist) map.setView([tourist.lat, tourist.lon], 16); });
+}
+function renderIncidentQueue(){
+    const list = document.getElementById('adminIncidentQueue');
+    if (!list) return;
+    const filtered = currentIncidents.filter(item => (incidentFilter === 'all' || item.status === incidentFilter) && (`${item.id} ${item.desc || ''}`).toLowerCase().includes(incidentSearch));
+    list.innerHTML = filtered.length ? filtered.map(item => { const age = Math.max(0, Math.floor((Date.now() - new Date(item.ts).getTime()) / 60000)); return `<div class="admin-queue-item ${item.status === 'resolved' ? 'queue-resolved' : 'queue-alert'}" data-incident-id="${item.id}"><strong>Incident #${item.id}<span class="triage-badge ${item.status}">${item.status}</span></strong><small>${item.desc || 'SOS reported'} · ${new Date(item.ts).toLocaleTimeString()} <span class="response-time">${age}m old</span></small></div>`; }).join('') : '<div class="empty-state">No matching incidents</div>';
+    list.querySelectorAll('[data-incident-id]').forEach(item => item.onclick = () => { const incident = currentIncidents.find(value => value.id === Number(item.dataset.incidentId)); if (incident) { showIncident(incident); map.setView([incident.lat, incident.lon], 16); } });
+    document.getElementById('metricIncidents').textContent = currentIncidents.filter(item => item.status !== 'resolved').length;
+}
+document.querySelectorAll('.filter-chip').forEach(button => button.addEventListener('click', () => { incidentFilter = button.dataset.filter; document.querySelectorAll('.filter-chip').forEach(item => item.classList.toggle('active', item === button)); renderIncidentQueue(); }));
+document.getElementById('incidentSearch')?.addEventListener('input', event => { incidentSearch = event.target.value.trim().toLowerCase(); renderIncidentQueue(); });
+const adminSidebar = document.querySelector('.admin-sidebar');
+const adminOpenSidebar = document.getElementById('adminOpenSidebar');
+function setAdminSidebarOpen(isOpen){
+    adminSidebar?.classList.toggle('is-collapsed', !isOpen);
+    adminOpenSidebar?.classList.toggle('is-visible', !isOpen);
+    adminOpenSidebar?.setAttribute('aria-expanded', String(isOpen));
+}
+document.getElementById('adminSidebarToggle')?.addEventListener('click', () => setAdminSidebarOpen(false));
+adminOpenSidebar?.addEventListener('click', () => { setAdminSidebarOpen(true); incidentPopup.hidden = true; incidentToggle.setAttribute('aria-expanded', 'false'); });
+document.getElementById('adminFocusIncidents')?.addEventListener('click', () => { const incident = currentIncidents.find(item => item.status !== 'resolved'); if (incident) map.setView([incident.lat, incident.lon], 14); });
+document.getElementById('adminRefresh')?.addEventListener('click', () => { loadFences(); loadIncidents(); });
+document.getElementById('showIncidentLayer')?.addEventListener('change', event => event.target.checked ? map.addLayer(incidentsLayer) : map.removeLayer(incidentsLayer));
+document.getElementById('showTouristLayer')?.addEventListener('change', event => event.target.checked ? map.addLayer(touristLocationsLayer) : map.removeLayer(touristLocationsLayer));
+document.getElementById('showFenceLayer')?.addEventListener('change', event => event.target.checked ? map.addLayer(drawnItems) : map.removeLayer(drawnItems));
+document.getElementById('adminShowAudit')?.addEventListener('click', async () => {
+    const drawer = document.getElementById('auditDrawer');
+    drawer.hidden = false;
+    const token = localStorage.getItem('admin_token');
+    if (!token) { document.getElementById('adminModal').style.display = 'flex'; return; }
+    const response = await fetch('/admin/audit', {headers:{'Authorization':'Bearer ' + token}});
+    const list = document.getElementById('auditList');
+    if (!response.ok) { list.innerHTML = '<div class="empty-state">Sign in again to view the audit log.</div>'; return; }
+    const data = await response.json();
+    list.innerHTML = data.length ? data.map(item => `<div class="audit-item"><strong>${item.action} · ${item.entity_type} ${item.entity_id || ''}</strong><small>${new Date(item.created_at).toLocaleString()}</small></div>`).join('') : '<div class="empty-state">No recorded actions</div>';
+});
+document.getElementById('closeAudit')?.addEventListener('click', () => { document.getElementById('auditDrawer').hidden = true; });
+
 // Admin register/reset UI removed — these actions are available via API/scripts
 
 async function loadFences(){
     fencesLayer.clearLayers();
+    drawnItems.clearLayers();
     const res = await fetch('/api/fences');
     const data = await res.json();
+    document.getElementById('metricFences').textContent = data.length;
+    const clearFences = document.getElementById('clearFences');
+    if (clearFences) clearFences.disabled = !data.length;
+    const queue = document.getElementById('fenceQueue');
+    if (queue) {
+        queue.innerHTML = data.length ? data.map(f => `<div class="admin-queue-item"><strong>${f.name}<span class="triage-badge">${f.fence_type}</span></strong><small><button class="danger-text fence-delete" data-fence-id="${f.id}">Delete zone</button></small></div>`).join('') : '<div class="empty-state">No safety zones</div>';
+        queue.querySelectorAll('.fence-delete').forEach(button => button.addEventListener('click', async event => {
+            event.stopPropagation();
+            if (!confirm('Delete this safety zone? This cannot be undone.')) return;
+            await deleteFence(button.dataset.fenceId);
+        }));
+    }
     data.forEach(f => {
         const color = f.fence_type === 'restricted' ? 'red' : (f.fence_type === 'high-risk' ? 'orange' : 'green');
-        const g = L.geoJSON(f.geojson, {style: {color}}).bindPopup(f.name).addTo(fencesLayer);
+        const g = L.geoJSON(f.geojson, {style: {color}}).bindPopup(f.name).addTo(drawnItems);
         g.eachLayer(layer => { if (layer.feature) layer.feature.properties = layer.feature.properties || {}; layer.feature.properties.db_id = f.id; });
     });
 }
+
+async function deleteFence(fenceId){
+    const token = localStorage.getItem('admin_token');
+    if (!token) { document.getElementById('adminModal').style.display = 'flex'; return; }
+    const response = await fetch(`/admin/fences/${fenceId}`, {method: 'DELETE', headers: {'Authorization': 'Bearer ' + token}});
+    if (response.status === 401 || response.status === 403) { handleAdminAuthFailure(); return; }
+    if (!response.ok) { alert(`Could not delete safety zone (${response.status})`); return; }
+    addAdminNotification('Safety zone deleted', 'The zone was removed from the map', 'warning');
+    await loadFences();
+}
+
+function handleAdminAuthFailure(){
+    localStorage.removeItem('admin_token');
+    syncAdminLoginButton();
+    document.getElementById('adminModal').style.display = 'flex';
+    alert('Your admin session has expired. Please log in again.');
+}
+
+document.getElementById('clearFences')?.addEventListener('click', async () => {
+    if (!confirm('Clear all safety zones? This cannot be undone.')) return;
+    const token = localStorage.getItem('admin_token');
+    if (!token) { document.getElementById('adminModal').style.display = 'flex'; return; }
+    const response = await fetch('/admin/fences', {method: 'DELETE', headers: {'Authorization': 'Bearer ' + token}});
+    if (response.status === 401 || response.status === 403) { handleAdminAuthFailure(); return; }
+    if (!response.ok) { alert(`Could not clear safety zones (${response.status})`); return; }
+    const result = await response.json();
+    await loadFences();
+    addAdminNotification('Safety zones cleared', `${result.deleted} zone${result.deleted === 1 ? '' : 's'} removed from the map`, 'warning');
+});
 
 async function loadIncidents(){
     incidentsLayer.clearLayers();
     const res = await fetch('/api/incidents');
     const data = await res.json();
+    currentIncidents = data;
     data.forEach(i => {
         const m = L.marker([i.lat, i.lon]).addTo(incidentsLayer);
         m.bindPopup((i.desc || 'Incident') + `<br/><a href="#" class="view-incident" data-id="${i.id}">View details</a>`);
@@ -200,12 +305,13 @@ async function loadIncidents(){
     // populate sidebar incident list
     const list = document.getElementById('incidentList');
     document.getElementById('incidentCount').textContent = data.length;
+    renderIncidentQueue();
     if (!data.length) { list.innerHTML = '<div class="empty-state">No active incidents</div>'; return }
     list.innerHTML = '';
     data.forEach(i => {
         const el = document.createElement('div'); el.className = 'list-item';
-        const triage = localStorage.getItem(`incident_triage_${i.id}`) || 'New';
-        el.innerHTML = `<div class="incident-title">Incident #${i.id}<span class="triage-badge ${triage.toLowerCase()}">${triage}</span></div><div class="incident-meta">${i.desc || ''} · ${i.ts}</div>`;
+        const triage = i.status || 'open';
+        el.innerHTML = `<div class="incident-title">Incident #${i.id}<span class="triage-badge ${triage}">${triage}</span></div><div class="incident-meta">${i.desc || ''} · ${i.ts}</div>`;
         el.style.cursor = 'pointer';
         el.onclick = () => { showIncident(i); };
         list.appendChild(el);
@@ -230,9 +336,30 @@ function showIncident(i){
     triage.className = 'triage-control';
     triage.innerHTML = '<span>Operator triage</span><select><option>New</option><option>Acknowledged</option><option>Resolved</option></select>';
     const select = triage.querySelector('select');
-    select.value = localStorage.getItem(`incident_triage_${i.id}`) || 'New';
-    select.onchange = () => { localStorage.setItem(`incident_triage_${i.id}`, select.value); loadIncidents(); };
+    select.value = i.status === 'open' ? 'New' : i.status.charAt(0).toUpperCase() + i.status.slice(1);
+    select.onchange = async () => {
+        const token = localStorage.getItem('admin_token');
+        if (!token) { alert('Please login as admin first'); return; }
+        const status = select.value.toLowerCase();
+        const response = await fetch(`/admin/incidents/${i.id}`, {method:'PATCH', headers:{'Content-Type':'application/json', 'Authorization':'Bearer ' + token}, body:JSON.stringify({status})});
+        if (!response.ok) { alert('Could not update incident'); return; }
+        await loadIncidents();
+    };
     container.appendChild(triage);
+    const responseActions = document.createElement('div');
+    responseActions.className = 'response-actions';
+    responseActions.innerHTML = '<button class="ghost" data-response="acknowledged">Acknowledge</button><button class="primary" data-response="resolved">Resolve</button><a class="ghost response-link" target="_blank" rel="noopener">Open route</a>';
+    responseActions.querySelector('.response-link').href = `https://www.google.com/maps/dir/?api=1&destination=${i.lat},${i.lon}`;
+    responseActions.querySelectorAll('[data-response]').forEach(button => button.onclick = async () => {
+        const token = localStorage.getItem('admin_token');
+        if (!token) { document.getElementById('adminModal').style.display = 'flex'; return; }
+        const response = await fetch(`/admin/incidents/${i.id}`, {method:'PATCH', headers:{'Content-Type':'application/json', 'Authorization':'Bearer ' + token}, body:JSON.stringify({status:button.dataset.response})});
+        if (!response.ok) { showToast('Could not update incident'); return; }
+        showToast(`Incident #${i.id} marked ${button.dataset.response}`);
+        document.getElementById('incidentModal').style.display = 'none';
+        await loadIncidents();
+    });
+    container.appendChild(responseActions);
     document.getElementById('incidentModal').style.display = 'flex';
 }
 

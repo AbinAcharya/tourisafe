@@ -5,3 +5,8 @@ register attempt: debuguser debug@example.com
 register attempt: abinT 
 password hash ok, len=2
 user created id=5
+register attempt: testuser test@example.com
+password hash ok, len=6
+user created id=6
+register attempt: testuser test@example.com
+register attempt: testuser test@example.com
