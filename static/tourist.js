@@ -10,6 +10,8 @@ let marker = null;
 let accuracyCircle = null;
 let watchId = null;
 let telemetryInterval = null;
+let hasCenteredOnUser = false; // recenter the map on the first GPS fix only
+let lastTelemetryAt = 0;       // throttle telemetry uploads (see startTelemetry)
 let fencesLayer = L.geoJSON().addTo(map);
 const defaultView = [20.5937, 78.9629];
 
@@ -279,12 +281,18 @@ document.getElementById('startTelemetry').onclick = async () => {
       if (marker) marker.setLatLng([lat,lon]); else marker = TouriSafe.selfMarker([lat,lon]).addTo(map);
       if (accuracyCircle) accuracyCircle.setLatLng([lat, lon]).setRadius(pos.coords.accuracy || 0);
       else accuracyCircle = TouriSafe.accuracyCircle([lat, lon], pos.coords.accuracy || 0).addTo(map);
-      map.setView([lat,lon], 15);
-      await sendTelemetry(lat, lon);
+      // Recenter on the FIRST fix only. Re-centering on every GPS tick fought
+      // the user's own panning and forced a full tile reload each time (jank).
+      if (!hasCenteredOnUser){ map.setView([lat,lon], 15); hasCenteredOnUser = true; }
       body.classList.add('tracking-active');
       document.getElementById('statusMetrics').textContent = `${Math.round(pos.coords.accuracy || 0)}m accuracy`;
       setStatus('Location sharing active');
-    }, err => { body.classList.remove('tracking-active'); setStatus(err.code === 1 ? 'Location permission needed' : 'Location unavailable'); }, {enableHighAccuracy:true});
+      // Throttle uploads: watchPosition can fire several times a second under
+      // enableHighAccuracy — one POST per ~3s is ample for live tracking and
+      // keeps the network/backend from being hammered (a real latency source).
+      const now = Date.now();
+      if (now - lastTelemetryAt >= 3000){ lastTelemetryAt = now; sendTelemetry(lat, lon); }
+    }, err => { body.classList.remove('tracking-active'); setStatus(err.code === 1 ? 'Location permission needed' : 'Location unavailable'); }, {enableHighAccuracy:true, maximumAge:2000});
   } else {
     setStatus('Geolocation not available');
   }
@@ -294,6 +302,7 @@ document.getElementById('startTelemetry').onclick = async () => {
 
 document.getElementById('stopTelemetry').onclick = () => {
   if (watchId) { navigator.geolocation.clearWatch(watchId); watchId = null; }
+  hasCenteredOnUser = false; // recenter again next time tracking starts
   setStatus('Stopped telemetry');
   body.classList.remove('tracking-active');
   document.getElementById('statusMetrics').textContent = navigator.onLine ? 'Online' : 'Offline';

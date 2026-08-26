@@ -13,36 +13,34 @@
     location: '#2878c8',
   };
 
-  // CartoDB raster basemaps: clean, muted, retina-aware.
-  const TILE = {
-    voyager: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-    positron: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-    dark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    darkBase: 'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',
-    darkLabels: 'https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png',
-  };
+  // OpenStreetMap standard raster tiles — free and require no API key. (The old
+  // CARTO basemaps began returning "API KEY REQUIRED" error tiles, which broke
+  // the map on both pages and triggered a storm of failing tile requests.) Light
+  // and dark use the SAME source, so tiles are fetched/cached once and shared.
+  const OSM_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+  // 1x1 transparent PNG, shown instead of a broken image if a tile ever fails.
+  const BLANK_TILE = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+  function tileOpts(extra) {
+    return Object.assign({
+      subdomains: 'abc',
+      maxZoom: 19,
+      crossOrigin: true,
+      updateWhenZooming: false, // don't re-request tiles mid-zoom gesture
+      errorTileUrl: BLANK_TILE,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    }, extra || {});
+  }
   function basemap(kind) {
-    return L.tileLayer(TILE[kind] || TILE.voyager, {
-      subdomains: 'abcd',
-      maxZoom: 20,
-      attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-    });
+    return L.tileLayer(OSM_URL, tileOpts());
   }
 
-  // A dark basemap with brightened, near-white place labels. CARTO's dark_all
-  // ships dim grey labels that vanish on the dark background, so we build the
-  // map from a label-free base plus a labels-only layer we brighten via the
-  // .ts-dark-labels CSS filter — the background stays deep-dark while the text
-  // reads clearly. Returned as one layer group so it adds/removes as a unit.
+  // Dark basemap: the same OSM tiles, darkened entirely in the browser via a CSS
+  // invert/hue-rotate filter on this layer's container (.ts-dark-tiles). No
+  // separate keyed dark source, so it can never hit an API-key wall — and the
+  // vector safety zones / markers (in other Leaflet panes) keep their true
+  // colours because the filter only touches this tile layer.
   function darkBasemap() {
-    const base = L.tileLayer(TILE.darkBase, {
-      subdomains: 'abcd', maxZoom: 20, zIndex: 1,
-      attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-    });
-    const labels = L.tileLayer(TILE.darkLabels, {
-      subdomains: 'abcd', maxZoom: 20, zIndex: 2, className: 'ts-dark-labels',
-    });
-    return L.layerGroup([base, labels]);
+    return L.tileLayer(OSM_URL, tileOpts({ className: 'ts-dark-tiles' }));
   }
 
   // Per-type vector styling for safety zones.
