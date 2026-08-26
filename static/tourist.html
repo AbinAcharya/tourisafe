@@ -18,33 +18,33 @@
         <div class="controls">
           <button id="registerBtn" class="ghost">Create account</button>
           <button id="loginBtn" class="ghost">Sign in</button>
-          <button id="startTelemetry" class="primary"><span class="button-icon" aria-hidden="true">&#9673;</span> Start tracking</button>
+          <button id="startTelemetry" class="primary"><i data-lucide="navigation" class="btn-ico"></i> Start tracking</button>
           <button id="stopTelemetry" class="ghost" disabled>Stop tracking</button>
           <div class="session-menu" id="touristSession" hidden>
-            <button id="touristSessionBtn" class="session-button" aria-expanded="false"><span class="avatar">T</span><span>Tourist</span><span class="chevron">&#8964;</span></button>
+            <button id="touristSessionBtn" class="session-button" aria-expanded="false"><span class="avatar">T</span><span>Tourist</span><i data-lucide="chevron-down" class="chevron"></i></button>
             <div class="session-dropdown" id="touristSessionMenu" hidden><button id="touristLogout" class="dropdown-action">Sign out</button></div>
           </div>
-          <button id="touristNotifications" class="icon-button" aria-label="Open notifications" title="Notifications"><span>&#128276;</span><b id="touristNotificationCount" hidden>0</b></button>
-          <button id="touristSettings" class="icon-button" aria-label="Open settings" title="Settings">&#9881;</button>
+          <button id="touristNotifications" class="icon-button" aria-label="Open notifications" title="Notifications"><i data-lucide="bell"></i><b id="touristNotificationCount" hidden>0</b></button>
+          <button id="touristSettings" class="icon-button" aria-label="Open settings" title="Settings"><i data-lucide="settings"></i></button>
         </div>
       </div>
     </header>
     <main class="map-wrap">
       <div id="map"></div>
-      <div class="safety-alert-banner" id="touristAlertBanner" hidden role="status"><span class="alert-pulse"></span><span><strong id="touristAlertTitle">Safety alert</strong><small id="touristAlertBody"></small></span><button id="dismissTouristAlert" class="close-button" aria-label="Dismiss safety alert">&times;</button></div>
-      <div class="tourist-dashboard-card" id="touristDashboardCard"><span class="section-kicker">Current area</span><div class="safety-score"><strong id="touristSafetyScore">Safe</strong><span id="touristSafetyDetail">No active local alerts</span></div><div class="trip-actions"><button id="tripCheckIn" class="primary">Start trip</button><button id="tripShare" class="ghost">Share trip</button></div></div>
+      <div class="safety-alert-banner" id="touristAlertBanner" hidden role="status"><span class="alert-pulse"></span><span><strong id="touristAlertTitle">Safety alert</strong><small id="touristAlertBody"></small></span><button id="dismissTouristAlert" class="close-button" aria-label="Dismiss safety alert"><i data-lucide="x"></i></button></div>
+      <div class="tourist-dashboard-card" id="touristDashboardCard" data-tone="safe"><span class="section-kicker">Current area</span><div class="safety-gauge"><svg class="gauge-ring" viewBox="0 0 72 72" width="64" height="64" aria-hidden="true"><circle class="gauge-track" cx="36" cy="36" r="30"></circle><circle class="gauge-value" id="touristGaugeArc" cx="36" cy="36" r="30" transform="rotate(-90 36 36)"></circle></svg><div class="gauge-label"><strong id="touristSafetyScore">Safe</strong><span id="touristSafetyDetail">No active local alerts</span></div></div><div class="trip-actions"><button id="tripCheckIn" class="primary">Start trip</button><button id="tripShare" class="ghost">Share trip</button></div></div>
       <div class="map-toolbar" aria-label="Map controls">
-        <button id="touristZoomIn" class="map-tool" aria-label="Zoom in" title="Zoom in">+</button>
-        <button id="touristZoomOut" class="map-tool" aria-label="Zoom out" title="Zoom out">&#8722;</button>
+        <button id="touristZoomIn" class="map-tool" aria-label="Zoom in" title="Zoom in"><i data-lucide="plus"></i></button>
+        <button id="touristZoomOut" class="map-tool" aria-label="Zoom out" title="Zoom out"><i data-lucide="minus"></i></button>
         <span class="toolbar-rule"></span>
-        <button id="touristLocate" class="map-tool map-tool-wide" aria-label="Use my location" title="Use my location">&#9678;</button>
-        <button id="touristResetView" class="map-tool map-tool-wide" aria-label="Reset map view" title="Reset map view">&#8962;</button>
-        <button id="touristFullscreen" class="map-tool map-tool-wide" aria-label="Toggle fullscreen map" title="Toggle fullscreen map">&#9974;</button>
+        <button id="touristLocate" class="map-tool map-tool-wide" aria-label="Use my location" title="Use my location"><i data-lucide="locate-fixed"></i></button>
+        <button id="touristResetView" class="map-tool map-tool-wide" aria-label="Reset map view" title="Reset map view"><i data-lucide="home"></i></button>
+        <button id="touristFullscreen" class="map-tool map-tool-wide" aria-label="Toggle fullscreen map" title="Toggle fullscreen map"><i data-lucide="maximize"></i></button>
         <span class="toolbar-rule"></span>
-        <button id="touristLegend" class="map-tool map-tool-wide" aria-label="Show map legend" title="Map legend">&#9432;</button>
+        <button id="touristLegend" class="map-tool map-tool-wide" aria-label="Show map legend" title="Map legend"><i data-lucide="info"></i></button>
       </div>
       <div class="map-legend" id="touristLegendPanel" hidden>
-        <div class="legend-heading"><strong>Map legend</strong><button id="closeLegend" class="close-button" aria-label="Close map legend">&times;</button></div>
+        <div class="legend-heading"><strong>Map legend</strong><button id="closeLegend" class="close-button" aria-label="Close map legend"><i data-lucide="x"></i></button></div>
         <div class="legend-row"><span class="legend-swatch safe"></span>Safe area</div>
         <div class="legend-row"><span class="legend-swatch caution"></span>Caution area</div>
         <div class="legend-row"><span class="legend-swatch danger"></span>Restricted or high-risk</div>
@@ -61,20 +61,20 @@
       <div id="touristNotificationList" class="notification-list"><div class="empty-state">No new activity</div></div>
     </aside>
     <aside class="utility-drawer" id="touristUtilityDrawer" hidden aria-label="Safety tools">
-      <div class="drawer-heading"><div><span class="section-kicker">Your safety kit</span><strong>Safety tools</strong></div><button id="closeUtility" class="close-button" aria-label="Close safety tools">&times;</button></div>
-      <button class="utility-action" id="nearbyHelp"><span class="utility-icon">+</span><span><strong>Nearby help</strong><small>Find hospitals, police and pharmacies</small></span><span>&#8250;</span></button>
-      <button class="utility-action" id="trustedContacts"><span class="utility-icon">&#9829;</span><span><strong>Trusted contacts</strong><small id="contactSummary">No contacts saved</small></span><span>&#8250;</span></button>
+      <div class="drawer-heading"><div><span class="section-kicker">Your safety kit</span><strong>Safety tools</strong></div><button id="closeUtility" class="close-button" aria-label="Close safety tools"><i data-lucide="x"></i></button></div>
+      <button class="utility-action" id="nearbyHelp"><span class="utility-icon"><i data-lucide="life-buoy"></i></span><span><strong>Nearby help</strong><small>Find hospitals, police and pharmacies</small></span><i data-lucide="chevron-right"></i></button>
+      <button class="utility-action" id="trustedContacts"><span class="utility-icon"><i data-lucide="users"></i></span><span><strong>Trusted contacts</strong><small id="contactSummary">No contacts saved</small></span><i data-lucide="chevron-right"></i></button>
       <div class="settings-section"><span class="section-kicker">Preferences</span><label class="setting-row"><span>Large text</span><input id="largeTextToggle" type="checkbox"></label><label class="setting-row"><span>Dark map</span><input id="darkMapToggle" type="checkbox"></label><label class="setting-row"><span>Language</span><select id="languageSelect"><option>English</option><option>Hindi</option><option>Spanish</option></select></label></div>
     </aside>
     <div class="modal-backdrop" id="sosModal" hidden>
       <div class="modal sos-modal" role="dialog" aria-modal="true" aria-labelledby="sosTitle">
-        <span class="sos-modal-icon">!</span><h3 id="sosTitle">Send an SOS?</h3>
+        <span class="sos-modal-icon"><i data-lucide="triangle-alert"></i></span><h3 id="sosTitle">Send an SOS?</h3>
         <p class="modal-copy">Your current location will be shared with Tourisafe responders.</p>
         <div class="hold-track"><span id="sosHoldProgress"></span></div><button id="sosConfirm" class="danger sos-confirm" disabled>Press and hold for 3 seconds</button><button id="sosCancel" class="ghost">Cancel</button>
       </div>
     </div>
     <div class="modal-backdrop" id="contactsModal" hidden>
-      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="contactsTitle"><div class="card-heading"><div><span class="section-kicker">Stay connected</span><h3 id="contactsTitle">Trusted contacts</h3></div><button id="contactsClose" class="close-button" aria-label="Close trusted contacts">&times;</button></div><p class="modal-copy">Saved on this device and ready to call in an emergency.</p><div id="contactsList" class="contacts-list"></div><div class="contact-entry"><input id="contactName" placeholder="Name" autocomplete="name"><input id="contactPhone" placeholder="Phone number" inputmode="tel" autocomplete="tel"><button id="contactAdd" class="primary">Add</button></div></div>
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="contactsTitle"><div class="card-heading"><div><span class="section-kicker">Stay connected</span><h3 id="contactsTitle">Trusted contacts</h3></div><button id="contactsClose" class="close-button" aria-label="Close trusted contacts"><i data-lucide="x"></i></button></div><p class="modal-copy">Saved on this device and ready to call in an emergency.</p><div id="contactsList" class="contacts-list"></div><div class="contact-entry"><input id="contactName" placeholder="Name" autocomplete="name"><input id="contactPhone" placeholder="Phone number" inputmode="tel" autocomplete="tel"><button id="contactAdd" class="primary">Add</button></div></div>
     </div>
     <!-- Floating SOS button -->
     <button id="sosBtn" class="fab-sos" title="Send SOS"><span class="sos-ring"></span><span>SOS</span><small>Emergency</small></button>
@@ -88,8 +88,25 @@
         <div class="actions"><button id="authCancel" class="ghost">Cancel</button><button id="authSubmit" class="primary">Submit</button></div>
       </div>
     </div>
-    <link rel="stylesheet" href="/static/styles.css?v=8">
+    <!-- First-visit onboarding -->
+    <div class="onboarding-overlay" id="touristOnboarding" hidden>
+      <div class="onboarding-card">
+        <span class="onboarding-badge"><i data-lucide="shield-check"></i></span>
+        <h3>Welcome to Tourisafe</h3>
+        <p class="modal-copy">Explore with confidence — here's how Tourisafe looks out for you.</p>
+        <ul class="onboarding-list">
+          <li><span class="ob-ico ob-ico--risk"><i data-lucide="triangle-alert"></i></span><span><strong>Live zone alerts</strong><small>Get warned the moment you approach a high-risk or restricted area.</small></span></li>
+          <li><span class="ob-ico ob-ico--sos"><i data-lucide="life-buoy"></i></span><span><strong>One-tap SOS</strong><small>Press and hold the SOS button to send responders your live location.</small></span></li>
+          <li><span class="ob-ico ob-ico--map"><i data-lucide="navigation"></i></span><span><strong>Real-time status</strong><small>Start tracking to watch your safety status update as you move.</small></span></li>
+        </ul>
+        <button id="onboardingDone" class="primary onboarding-cta">Get started</button>
+      </div>
+    </div>
+    <link rel="stylesheet" href="/static/styles.css?v=15">
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="/static/tourist.js?v=5"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="/static/map-style.js?v=3"></script>
+    <script src="/static/tourist.js?v=8"></script>
+    <script>TouriSafe.icons();</script>
   </body>
 </html>

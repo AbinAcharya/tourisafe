@@ -5,7 +5,11 @@
 :root{--ink:#1d2725;--muted:#68736f;--paper:#f5f6f2;--surface:#ffffff;--line:#dfe4df;--sage:#2f6b5b;--sage-dark:#205044;--mint:#e4f0ea;--amber:#c88a35;--danger:#c94b43;--shadow:0 18px 48px rgba(24,39,34,.14);--radius:10px;font-family:"DM Sans",sans-serif}
 :root{--ink:#1d2725;--muted:#68736f;--paper:#f5f6f2;--surface:#ffffff;--line:#dfe4df;--sage:#2f6b5b;--sage-dark:#205044;--mint:#e4f0ea;--amber:#c88a35;--danger:#c94b43;--shadow:0 18px 48px rgba(24,39,34,.14);--radius:10px;font-family:"DM Sans",sans-serif}
 [hidden]{display:none !important}
-.map-dark .leaflet-tile{filter:brightness(.72) contrast(1.12) saturate(.72)}
+/* Dark map: darkBasemap() draws a label-free CARTO dark base plus a labels-only
+   layer on top. We brighten ONLY that labels layer to near-white so place names
+   stay legible on the deep-dark background. (An earlier full-tile brightness
+   filter double-darkened dark_all and made the labels vanish — removed.) */
+.ts-dark-labels{filter:brightness(2.1) contrast(1.05)}
 .admin-search{width:100%;box-sizing:border-box;padding:9px 10px;margin-bottom:9px;border:1px solid var(--line);border-radius:7px;background:#fbfcfa;color:var(--ink);font:inherit;font-size:12px}.admin-search:focus{outline:2px solid rgba(47,107,91,.2);border-color:var(--sage)}.response-time{color:var(--danger);font-size:10px;font-weight:700}.toast-region{position:fixed;right:22px;bottom:22px;z-index:3000;display:flex;flex-direction:column;gap:8px}.toast{padding:11px 14px;background:var(--ink);color:#fff;border-radius:7px;box-shadow:var(--shadow);font-size:12px}.audit-drawer{position:fixed;right:22px;top:82px;width:330px;max-width:calc(100vw - 44px);max-height:calc(100vh - 110px);overflow:auto;padding:18px;background:rgba(255,255,255,.98);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);z-index:1900}.audit-item{padding:9px 0;border-bottom:1px solid var(--line);font-size:11px}.audit-item strong,.audit-item small{display:block}.audit-item small{color:var(--muted);margin-top:2px}
 .response-actions{display:flex;flex-wrap:wrap;gap:7px;margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}.response-actions button,.response-link{padding:8px 10px;font-size:11px}.response-link{display:inline-flex;align-items:center;border:1px solid var(--line);color:var(--ink);border-radius:7px}
 .safety-alert-banner{position:absolute;left:50%;top:18px;transform:translateX(-50%);z-index:1200;display:flex;align-items:center;gap:10px;width:min(440px,calc(100% - 44px));padding:11px 14px;background:#fff4df;border:1px solid #efd39b;border-radius:9px;box-shadow:var(--shadow)}.safety-alert-banner strong,.safety-alert-banner small{display:block}.safety-alert-banner strong{font-size:13px;color:#7b5317}.safety-alert-banner small{font-size:11px;color:#98733b}.safety-alert-banner.notice{background:var(--mint);border-color:#bdd3c8}.safety-alert-banner.notice strong{color:var(--sage)}.alert-pulse{width:9px;height:9px;border-radius:50%;background:var(--amber);box-shadow:0 0 0 4px rgba(200,138,53,.14);flex:none}.safety-alert-banner .close-button{margin-left:auto}.tourist-dashboard-card{position:absolute;right:22px;bottom:22px;z-index:1000;width:225px;padding:15px;background:rgba(255,255,255,.95);border:1px solid var(--line);border-radius:9px;box-shadow:var(--shadow)}.safety-score{display:flex;align-items:baseline;justify-content:space-between;gap:9px}.safety-score strong{font:700 24px "Space Grotesk",sans-serif;color:var(--sage)}.safety-score span{font-size:10px;color:var(--muted);text-align:right}.trip-actions{display:flex;gap:7px;margin-top:13px}.trip-actions button{padding:7px 9px;font-size:11px}.emergency-links{position:absolute;right:22px;bottom:22px;transform:translateY(76px);z-index:999;display:flex;gap:6px}.emergency-links a{padding:6px 8px;background:rgba(255,255,255,.9);border:1px solid var(--line);border-radius:6px;font-size:10px;font-weight:700}.emergency-links a:first-child{color:var(--danger)}
@@ -76,29 +80,231 @@ h1,h2,h3{font-weight:700;color:var(--ink)}body{font-size:15px;line-height:1.45}
 .admin-open-sidebar{left:auto;right:22px;top:22px}
 @media(max-width:900px){.admin-open-sidebar.is-visible{left:auto;right:12px;top:12px}}
 
-/* Admin map controls occupy separate lanes so they never stack on top of each other. */
+/* Admin map controls live in separate lanes so panels never stack: zoom tools
+   pin top-left, the incident toggle/popup keep their own bottom-left column
+   (clear of the tools), and the command panel stays on the right. */
 .admin-page .admin-sidebar{left:auto;right:22px}
 .admin-page .admin-open-sidebar{left:auto;right:22px;top:92px}
-.admin-page .map-toolbar{left:12px;top:190px;flex-direction:column;gap:5px}
+.admin-page .map-toolbar{left:22px;top:22px;flex-direction:column;gap:5px}
 .admin-page .toolbar-rule{width:22px;height:1px;margin:2px 0}
-.admin-page .incident-toggle{left:376px;right:auto;bottom:22px}
-.admin-page .incident-popup{left:376px;right:auto;bottom:82px;top:auto}
+.admin-page .incident-toggle{left:88px;right:auto;top:auto;bottom:22px;width:300px}
+.admin-page .incident-popup{left:88px;right:auto;top:auto;bottom:84px;width:340px;max-width:calc(100% - 110px);max-height:calc(100% - 96px);overflow:auto}
 @media(max-width:900px){
   .admin-page .admin-sidebar{left:auto;right:12px;width:min(330px,calc(100% - 24px))}
   .admin-page .admin-open-sidebar.is-visible{left:auto;right:12px;top:78px}
-  .admin-page .map-toolbar{left:12px;top:190px}
-  .admin-page .incident-toggle{left:12px;right:auto;bottom:12px;width:260px}
-  .admin-page .incident-popup{left:12px;right:auto;bottom:70px;width:330px;max-width:calc(100% - 24px)}
+  .admin-page .map-toolbar{left:12px;top:12px}
+  .admin-page .incident-toggle{left:12px;right:auto;top:auto;bottom:12px;width:min(300px,calc(100% - 24px))}
+  .admin-page .incident-popup{left:12px;right:auto;top:auto;bottom:66px;width:min(340px,calc(100% - 24px));max-width:calc(100% - 24px);max-height:calc(100% - 84px)}
 }
 
-/* Keep the collapsed command-center trigger clear of Leaflet's left toolbar. */
+/* Keep the collapsed command-center trigger pinned top-right. */
 #adminOpenSidebar{left:auto !important;right:22px !important;top:92px !important}
 @media(max-width:900px){#adminOpenSidebar.is-visible{left:auto !important;right:12px !important;top:78px !important}}
 
-/* Right-side command controls: incident toggle above the panel trigger. */
-.admin-page .incident-toggle{left:auto !important;right:22px !important;top:22px !important;bottom:auto !important;width:260px}
-.admin-page .incident-popup{left:auto !important;right:22px !important;top:82px !important;bottom:auto !important;width:330px;max-width:calc(100% - 44px)}
-@media(max-width:900px){
-  .admin-page .incident-toggle{left:auto !important;right:12px !important;top:12px !important;width:260px}
-  .admin-page .incident-popup{left:auto !important;right:12px !important;top:72px !important;width:330px;max-width:calc(100% - 24px)}
+/* ============================================================
+   Polish pass — Stage 1: icons, map markers, safety-zone labels
+   ============================================================ */
+
+/* Lucide SVG icons inherit currentColor; size them per context. */
+svg.lucide{width:18px;height:18px;vertical-align:middle;flex:none}
+button svg.lucide{pointer-events:none}
+.primary,.ghost,.danger{display:inline-flex;align-items:center;justify-content:center;gap:7px}
+.btn-ico{width:16px;height:16px}
+.icon-button svg.lucide{width:18px;height:18px}
+.map-tool svg.lucide{width:19px;height:19px}
+.map-tool-wide svg.lucide{width:17px;height:17px}
+.close-button svg.lucide{width:18px;height:18px}
+svg.lucide.chevron{width:16px;height:16px}
+.session-button{gap:7px}
+.incident-toggle-icon svg.lucide{width:16px;height:16px}
+.utility-icon svg.lucide{width:16px;height:16px}
+.utility-action>svg.lucide{color:var(--muted)}
+
+/* Designed map pins (incident / tourist / self) via divIcon. */
+.ts-pin-wrap{background:none;border:0}
+.ts-pin{position:relative;display:grid;place-items:center;width:26px;height:26px}
+.ts-pin__core{position:relative;z-index:2;display:grid;place-items:center;width:18px;height:18px;border-radius:50%;color:#fff;font:800 11px/1 "Space Grotesk",sans-serif;border:2px solid #fff;box-shadow:0 2px 7px rgba(20,25,30,.4)}
+.ts-pin__pulse{position:absolute;z-index:1;width:18px;height:18px;border-radius:50%;opacity:.5;animation:tsPulse 2.2s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes tsPulse{0%{transform:scale(1);opacity:.5}70%{transform:scale(2.7);opacity:0}100%{transform:scale(2.7);opacity:0}}
+.ts-pin--incident .ts-pin__core,.ts-pin--incident .ts-pin__pulse{background:var(--danger)}
+.ts-pin--tourist .ts-pin__core,.ts-pin--tourist .ts-pin__pulse{background:#2878c8}
+.ts-pin--self .ts-pin__core,.ts-pin--self .ts-pin__pulse{background:var(--sage)}
+.ts-ping{animation:tsPingFade 2.4s ease-out infinite}
+@keyframes tsPingFade{0%,100%{opacity:.9}50%{opacity:.35}}
+
+/* Permanent zone name pills rendered as Leaflet tooltips. */
+.leaflet-tooltip.zone-label{background:transparent;border:0;box-shadow:none;padding:0;white-space:nowrap}
+.leaflet-tooltip.zone-label:before{display:none}
+.zone-pill{display:inline-block;padding:3px 9px;border-radius:99px;font:700 10px/1.4 "Space Grotesk",sans-serif;letter-spacing:.02em;color:#fff;box-shadow:0 2px 8px rgba(20,25,30,.35);white-space:nowrap}
+.zone-pill--restricted{background:#c0392b}
+.zone-pill--high-risk{background:#c88a35}
+.zone-pill--safe{background:#2f6b5b}
+
+/* Leaflet popups tuned to the app's card look. */
+.leaflet-popup-content-wrapper{border-radius:9px;box-shadow:var(--shadow);font-family:"DM Sans",sans-serif}
+.leaflet-popup-content{margin:11px 14px;font-size:12px}
+
+/* ============================================================
+   Polish pass — Stage 2: admin "command center" dark theme
+   Gated behind .admin-page.theme-dark so the toggle can drop the class
+   and fall back to the base light palette (and the tourist page stays light).
+   ============================================================ */
+
+/* Remap the palette to a deep-slate console. Because nearly every rule
+   paints with var(--ink/muted/line/surface/paper/mint), redefining the
+   tokens here re-themes the entire admin UI from one place; the handful
+   of rules that hardcode light hex values are overridden below. */
+.admin-page.theme-dark{
+  --ink:#e7edf3;
+  --muted:#8a97a4;
+  --paper:#0c1116;
+  --surface:#161d26;
+  --line:#28323f;
+  --mint:#1b2a27;
+  --sage:#5aa993;
+  --sage-dark:#4a8c79;
+  --amber:#e2ab52;
+  --danger:#e0655a;
+  --shadow:0 20px 55px rgba(0,0,0,.55);
 }
+.admin-page.theme-dark,.admin-page.theme-dark body{background:var(--paper)}
+.admin-page.theme-dark{color:var(--ink)}
+
+/* Frosted-glass floating surfaces (semi-transparent + blur = depth). */
+.admin-page.theme-dark .topbar{
+  background:linear-gradient(180deg,rgba(20,27,35,.82),rgba(15,20,27,.72));
+  border-bottom-color:rgba(255,255,255,.06);
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+}
+.admin-page.theme-dark .admin-sidebar{
+  background:linear-gradient(180deg,rgba(23,31,41,.92),rgba(14,19,26,.88));
+  border-color:rgba(255,255,255,.07);
+  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+}
+.admin-page.theme-dark .map-toolbar,
+.admin-page.theme-dark .incident-toggle,
+.admin-page.theme-dark .card,
+.admin-page.theme-dark .session-dropdown{
+  background:rgba(22,29,38,.88);
+  border-color:rgba(255,255,255,.08);
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+}
+.admin-page.theme-dark .notification-drawer,
+.admin-page.theme-dark .audit-drawer{
+  background:rgba(17,23,31,.95);
+  border-color:rgba(255,255,255,.08);
+  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+}
+.admin-page.theme-dark .modal{background:#141b23;border-color:rgba(255,255,255,.09)}
+
+/* Inset tiles: metrics, queue rows, notifications, incident list, contacts. */
+.admin-page.theme-dark .metric-card,
+.admin-page.theme-dark .admin-queue-item,
+.admin-page.theme-dark .notification-item,
+.admin-page.theme-dark .list-item,
+.admin-page.theme-dark .contact-card{
+  background:rgba(255,255,255,.035);
+  border-color:rgba(255,255,255,.07);
+}
+.admin-page.theme-dark .metric-card{box-shadow:inset 0 2px 0 rgba(90,169,147,.45)}
+.admin-page.theme-dark .metric-card strong{color:#f1f5f8}
+.admin-page.theme-dark #metricConnection{color:var(--sage)}
+
+/* Fields: search, form inputs, triage selects. */
+.admin-page.theme-dark .admin-search,
+.admin-page.theme-dark .form-row input,
+.admin-page.theme-dark .form-row select,
+.admin-page.theme-dark .form-row textarea,
+.admin-page.theme-dark .triage-control select,
+.admin-page.theme-dark .setting-row select{
+  background:rgba(255,255,255,.04);
+  border-color:rgba(255,255,255,.1);
+  color:var(--ink);
+}
+.admin-page.theme-dark .admin-search::placeholder,
+.admin-page.theme-dark .form-row input::placeholder{color:#5f6b76}
+
+/* Accent chips / badges that used pale tints. */
+.admin-page.theme-dark .incident-toggle-icon{background:rgba(226,171,82,.16);color:var(--amber)}
+.admin-page.theme-dark .triage-badge{background:rgba(90,169,147,.16);color:#7fc9b3}
+.admin-page.theme-dark .triage-badge.acknowledged{background:rgba(226,171,82,.16);color:var(--amber)}
+.admin-page.theme-dark .triage-badge.resolved{background:rgba(255,255,255,.06);color:var(--muted)}
+
+/* Toast used var(--ink) as its background — now light — so repaint it. */
+.admin-page.theme-dark .toast{background:#1f2a35;color:var(--ink);border:1px solid rgba(255,255,255,.08)}
+
+/* Hover states hold to the dark mint instead of the light border. */
+.admin-page.theme-dark .ghost:hover{border-color:var(--sage)}
+
+/* Slim dark scrollbars inside the console panels. */
+.admin-page.theme-dark .admin-sidebar::-webkit-scrollbar,
+.admin-page.theme-dark .admin-queue::-webkit-scrollbar,
+.admin-page.theme-dark .list::-webkit-scrollbar{width:6px}
+.admin-page.theme-dark .admin-sidebar::-webkit-scrollbar-thumb,
+.admin-page.theme-dark .admin-queue::-webkit-scrollbar-thumb,
+.admin-page.theme-dark .list::-webkit-scrollbar-thumb{background:rgba(255,255,255,.13);border-radius:99px}
+
+/* Leaflet.draw ships a light monochrome sprite; invert its buttons so the
+   drawing tools read as dark controls with light glyphs, and dress the
+   bar/actions to match the console. */
+.admin-page.theme-dark .leaflet-draw-toolbar a,
+.admin-page.theme-dark .leaflet-draw-actions a{filter:invert(.9)}
+.admin-page.theme-dark .leaflet-bar{border-color:rgba(255,255,255,.1);box-shadow:0 6px 18px rgba(0,0,0,.5)}
+
+/* Skeleton shimmer loaders — shown on first paint, swapped for data/empty
+   states by loadIncidents()/loadFences(). */
+.skeleton-row{padding:10px;border:1px solid var(--line);border-radius:7px;background:var(--surface)}
+.skeleton-row + .skeleton-row{margin-top:6px}
+.skeleton-line{height:9px;border-radius:5px;background:linear-gradient(90deg,rgba(255,255,255,.05) 25%,rgba(255,255,255,.14) 37%,rgba(255,255,255,.05) 63%);background-size:400% 100%;animation:tsShimmer 1.4s ease infinite}
+.skeleton-line.short{width:52%}
+.skeleton-line + .skeleton-line{margin-top:8px}
+@keyframes tsShimmer{0%{background-position:100% 0}100%{background-position:0 0}}
+
+/* ============================================================
+   Polish pass — Stage 3: motion, risk gauge, onboarding
+   ============================================================ */
+
+/* Shared one-shot fade (zone overlay reveal + onboarding backdrop). */
+@keyframes tsFadeIn{from{opacity:0}to{opacity:1}}
+
+/* Toast slide-in. */
+.toast{animation:tsToastIn .32s cubic-bezier(.2,.9,.3,1)}
+@keyframes tsToastIn{from{opacity:0;transform:translateY(14px) scale(.98)}to{opacity:1;transform:none}}
+
+/* Stronger, radar-style SOS pulse: a breathing halo on the button plus an
+   expanding ring. (keeps the shared `pulse` keyframe for status dots). */
+.fab-sos{animation:sosBreathe 2.4s ease-in-out infinite}
+@keyframes sosBreathe{0%,100%{box-shadow:0 12px 28px rgba(201,75,67,.34),0 0 0 0 rgba(201,75,67,.36)}70%{box-shadow:0 12px 28px rgba(201,75,67,.34),0 0 0 15px rgba(201,75,67,0)}}
+.sos-ring{border-width:2px;border-color:rgba(201,75,67,.5);animation:sosRing 2.4s ease-out infinite}
+@keyframes sosRing{0%{transform:scale(.9);opacity:.6}70%{transform:scale(1.55);opacity:0}100%{transform:scale(1.55);opacity:0}}
+
+/* Circular risk gauge on the tourist dashboard card. */
+.safety-gauge{display:flex;align-items:center;gap:13px;margin-top:2px}
+.gauge-ring{flex:none}
+.gauge-track{fill:none;stroke:rgba(20,25,30,.1);stroke-width:6}
+.gauge-value{fill:none;stroke:var(--sage);stroke-width:6;stroke-linecap:round;stroke-dasharray:189;stroke-dashoffset:189;transition:stroke-dashoffset .9s cubic-bezier(.4,0,.2,1),stroke .4s ease}
+.gauge-label{min-width:0}
+.gauge-label strong{display:block;font:700 21px "Space Grotesk",sans-serif;color:var(--sage);line-height:1.1}
+.gauge-label span{display:block;font-size:10px;color:var(--muted);margin-top:3px}
+.tourist-dashboard-card[data-tone="warn"] .gauge-value{stroke:var(--amber)}
+.tourist-dashboard-card[data-tone="danger"] .gauge-value{stroke:var(--danger)}
+.tourist-dashboard-card[data-tone="warn"] .gauge-label strong{color:var(--amber)}
+.tourist-dashboard-card[data-tone="danger"] .gauge-label strong{color:var(--danger)}
+
+/* First-visit onboarding overlay. */
+.onboarding-overlay{position:fixed;inset:0;z-index:4000;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(16,22,20,.55);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);animation:tsFadeIn .3s ease}
+.onboarding-card{box-sizing:border-box;width:min(400px,100%);padding:26px;background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:0 30px 80px rgba(24,39,34,.32);text-align:center;animation:tsPopIn .35s cubic-bezier(.2,.9,.3,1)}
+.onboarding-badge{display:grid;place-items:center;width:52px;height:52px;margin:0 auto 14px;border-radius:16px;background:var(--mint);color:var(--sage)}
+.onboarding-badge svg.lucide{width:26px;height:26px}
+.onboarding-card h3{font-family:"Space Grotesk",sans-serif;margin:0 0 6px;font-size:22px}
+.onboarding-list{list-style:none;margin:18px 0 22px;padding:0;display:flex;flex-direction:column;gap:15px;text-align:left}
+.onboarding-list li{display:flex;gap:12px;align-items:flex-start}
+.onboarding-list strong{display:block;font-size:13px;color:var(--ink)}
+.onboarding-list small{display:block;font-size:11px;color:var(--muted);margin-top:2px;line-height:1.45}
+.ob-ico{flex:none;display:grid;place-items:center;width:34px;height:34px;border-radius:10px}
+.ob-ico svg.lucide{width:17px;height:17px}
+.ob-ico--risk{background:#fbe9d2;color:#b9781f}
+.ob-ico--sos{background:#fde3e0;color:var(--danger)}
+.ob-ico--map{background:var(--mint);color:var(--sage)}
+.onboarding-cta{width:100%;padding:12px}
+@keyframes tsPopIn{from{opacity:0;transform:translateY(14px) scale(.97)}to{opacity:1;transform:none}}

@@ -1,7 +1,27 @@
 const map = L.map('map', {zoomControl: false, scrollWheelZoom: true, keyboard: true}).setView([20.5937,78.9629], 5);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19,
-}).addTo(map);
+
+// Full light/dark console theme. Toggling the `theme-dark` body class re-themes
+// every panel via CSS; here we keep the map basemap in sync — brightened-label
+// dark tiles for the command-center look, clean Voyager tiles for light — and
+// remember the choice in localStorage. Defaults to dark on first visit.
+let adminBasemap = null;
+function setAdminTheme(dark, persist = true){
+    document.body.classList.toggle('theme-dark', dark);
+    if (adminBasemap) map.removeLayer(adminBasemap);
+    adminBasemap = dark ? TouriSafe.darkBasemap() : TouriSafe.basemap('voyager');
+    adminBasemap.addTo(map);
+    const button = document.getElementById('adminThemeToggle');
+    if (button){
+        button.innerHTML = '<i data-lucide="' + (dark ? 'sun' : 'moon') + '"></i>';
+        button.title = dark ? 'Switch to light theme' : 'Switch to dark theme';
+        TouriSafe.icons();
+    }
+    if (persist) localStorage.setItem('admin_theme', dark ? 'dark' : 'light');
+}
+setAdminTheme(localStorage.getItem('admin_theme') !== 'light', false);
+document.getElementById('adminThemeToggle')?.addEventListener('click', () => {
+    setAdminTheme(!document.body.classList.contains('theme-dark'));
+});
 
 let fencesLayer = L.geoJSON().addTo(map);
 let incidentsLayer = L.layerGroup().addTo(map);
@@ -21,6 +41,26 @@ function showToast(message){
     toast.textContent = message;
     region.appendChild(toast);
     setTimeout(() => toast.remove(), 4000);
+}
+
+// Animate a metric number from its current value up/down to a new target.
+// Skips the animation when the value is unchanged so frequent re-renders
+// (search/filter keystrokes) don't stutter.
+function countUp(el, target){
+    if (!el) return;
+    target = Number(target) || 0;
+    const start = Number(el.dataset.value ?? el.textContent) || 0;
+    el.dataset.value = target;
+    if (start === target){ el.textContent = target; return; }
+    const duration = 600, t0 = performance.now();
+    function step(now){
+        const p = Math.min(1, (now - t0) / duration);
+        const eased = 1 - Math.pow(1 - p, 3);
+        el.textContent = Math.round(start + (target - start) * eased);
+        if (p < 1) requestAnimationFrame(step);
+        else el.textContent = target;
+    }
+    requestAnimationFrame(step);
 }
 
 function setupMapControls(){
@@ -83,12 +123,12 @@ try{
         try{
             const msg = JSON.parse(ev.data);
             if (msg.type === 'incident_created'){
-                L.marker([msg.lat, msg.lon]).bindPopup(msg.description || 'Incident').addTo(incidentsLayer);
+                TouriSafe.incidentMarker([msg.lat, msg.lon]).bindPopup(msg.description || 'Incident').addTo(incidentsLayer);
                 addAdminNotification('New SOS incident', msg.description || 'An incident was reported nearby', 'alert');
                 loadIncidents();
             }
             if (msg.type === 'telemetry_anomaly'){
-                L.circle([msg.lat, msg.lon], {radius:50, color:'orange'}).addTo(map);
+                TouriSafe.ping([msg.lat, msg.lon], 'warn').addTo(map);
                 addAdminNotification('Telemetry anomaly', `User ${msg.user_id} reported unusual speed`, 'warning');
             }
             if (msg.type === 'telemetry_update'){
@@ -96,7 +136,7 @@ try{
                 touristLastSeen.set(key, msg);
                 let touristMarker = touristMarkers.get(key);
                 if (!touristMarker){
-                    touristMarker = L.marker([msg.lat, msg.lon]).addTo(touristLocationsLayer);
+                    touristMarker = TouriSafe.touristMarker([msg.lat, msg.lon]).addTo(touristLocationsLayer);
                     touristMarkers.set(key, touristMarker);
                 } else {
                     touristMarker.setLatLng([msg.lat, msg.lon]);
@@ -196,7 +236,7 @@ function setConnectionStatus(value){
 function renderTouristQueue(){
     const list = document.getElementById('touristQueue');
     if (!list) return;
-    document.getElementById('metricTourists').textContent = touristLastSeen.size;
+    countUp(document.getElementById('metricTourists'), touristLastSeen.size);
     document.getElementById('touristLastSeen').textContent = touristLastSeen.size ? 'Receiving updates' : 'Waiting for signal';
     list.innerHTML = touristLastSeen.size ? [...touristLastSeen.entries()].map(([key, item]) => `<div class="admin-queue-item" data-tourist-key="${key}"><strong>Tourist ${key}</strong><small>Last seen ${new Date(item.timestamp).toLocaleTimeString()} · ${item.speed ? `${Math.round(item.speed * 3.6)} km/h` : 'Stationary'}</small></div>`).join('') : '<div class="empty-state">No live locations yet</div>';
     list.querySelectorAll('[data-tourist-key]').forEach(item => item.onclick = () => { const tourist = touristLastSeen.get(item.dataset.touristKey); if (tourist) map.setView([tourist.lat, tourist.lon], 16); });
@@ -207,7 +247,7 @@ function renderIncidentQueue(){
     const filtered = currentIncidents.filter(item => (incidentFilter === 'all' || item.status === incidentFilter) && (`${item.id} ${item.desc || ''}`).toLowerCase().includes(incidentSearch));
     list.innerHTML = filtered.length ? filtered.map(item => { const age = Math.max(0, Math.floor((Date.now() - new Date(item.ts).getTime()) / 60000)); return `<div class="admin-queue-item ${item.status === 'resolved' ? 'queue-resolved' : 'queue-alert'}" data-incident-id="${item.id}"><strong>Incident #${item.id}<span class="triage-badge ${item.status}">${item.status}</span></strong><small>${item.desc || 'SOS reported'} · ${new Date(item.ts).toLocaleTimeString()} <span class="response-time">${age}m old</span></small></div>`; }).join('') : '<div class="empty-state">No matching incidents</div>';
     list.querySelectorAll('[data-incident-id]').forEach(item => item.onclick = () => { const incident = currentIncidents.find(value => value.id === Number(item.dataset.incidentId)); if (incident) { showIncident(incident); map.setView([incident.lat, incident.lon], 16); } });
-    document.getElementById('metricIncidents').textContent = currentIncidents.filter(item => item.status !== 'resolved').length;
+    countUp(document.getElementById('metricIncidents'), currentIncidents.filter(item => item.status !== 'resolved').length);
 }
 document.querySelectorAll('.filter-chip').forEach(button => button.addEventListener('click', () => { incidentFilter = button.dataset.filter; document.querySelectorAll('.filter-chip').forEach(item => item.classList.toggle('active', item === button)); renderIncidentQueue(); }));
 document.getElementById('incidentSearch')?.addEventListener('input', event => { incidentSearch = event.target.value.trim().toLowerCase(); renderIncidentQueue(); });
@@ -245,7 +285,7 @@ async function loadFences(){
     drawnItems.clearLayers();
     const res = await fetch('/api/fences');
     const data = await res.json();
-    document.getElementById('metricFences').textContent = data.length;
+    countUp(document.getElementById('metricFences'), data.length);
     const clearFences = document.getElementById('clearFences');
     if (clearFences) clearFences.disabled = !data.length;
     const queue = document.getElementById('fenceQueue');
@@ -258,8 +298,7 @@ async function loadFences(){
         }));
     }
     data.forEach(f => {
-        const color = f.fence_type === 'restricted' ? 'red' : (f.fence_type === 'high-risk' ? 'orange' : 'green');
-        const g = L.geoJSON(f.geojson, {style: {color}}).bindPopup(f.name).addTo(drawnItems);
+        const g = TouriSafe.decorateZone(L.geoJSON(f.geojson, {style: TouriSafe.zoneStyle(f.fence_type)}), {name: f.name, type: f.fence_type}).addTo(drawnItems);
         g.eachLayer(layer => { if (layer.feature) layer.feature.properties = layer.feature.properties || {}; layer.feature.properties.db_id = f.id; });
     });
 }
@@ -299,7 +338,7 @@ async function loadIncidents(){
     const data = await res.json();
     currentIncidents = data;
     data.forEach(i => {
-        const m = L.marker([i.lat, i.lon]).addTo(incidentsLayer);
+        const m = TouriSafe.incidentMarker([i.lat, i.lon]).addTo(incidentsLayer);
         m.bindPopup((i.desc || 'Incident') + `<br/><a href="#" class="view-incident" data-id="${i.id}">View details</a>`);
     });
     // populate sidebar incident list
@@ -327,7 +366,7 @@ function showIncident(i){
     table.style.gridTemplateColumns = '120px 1fr';
     table.style.rowGap = '8px';
     rows.forEach(r => {
-        const k = document.createElement('div'); k.style.fontWeight = '600'; k.style.color = '#0b1220'; k.textContent = r[0];
+        const k = document.createElement('div'); k.style.fontWeight = '600'; k.style.color = 'var(--ink)'; k.textContent = r[0];
         const v = document.createElement('div'); v.style.color = 'var(--muted)'; v.textContent = r[1];
         table.appendChild(k); table.appendChild(v);
     });
@@ -383,4 +422,4 @@ if (elSosDemo) elSosDemo.addEventListener('click', async () => {
         }catch(e){ console.error(e); alert('SOS error') }
 });
 
-loadFences(); loadIncidents();
+loadFences().then(() => TouriSafe.fadeInZones(map)); loadIncidents();

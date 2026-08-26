@@ -9,46 +9,47 @@
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
     <style>html,body,#map{height:100%;margin:0;padding:0} #controls{position:absolute;top:10px;left:10px;z-index:1000;background:white;padding:8px;border-radius:6px}</style>
   </head>
-  <body class="admin-page">
+  <body class="admin-page theme-dark">
     <header class="topbar">
       <div class="brand"><img src="/static/logo.svg" alt="Tourisafe" class="logo-img">Tourisafe</div>
       <div class="topbar-actions">
         <div class="small-muted"><span class="live-dot"></span>Operations center</div>
         <div class="controls">
-          <button id="adminLoginBtn" class="ghost"><span class="button-icon">&#8594;</span> Admin Login</button>
+          <button id="adminLoginBtn" class="ghost"><i data-lucide="log-in" class="btn-ico"></i> Admin Login</button>
           <div class="session-menu" id="adminSession" hidden>
-            <button id="adminSessionBtn" class="session-button" aria-expanded="false"><span class="avatar">A</span><span>Admin</span><span class="chevron">&#8964;</span></button>
+            <button id="adminSessionBtn" class="session-button" aria-expanded="false"><span class="avatar">A</span><span>Admin</span><i data-lucide="chevron-down" class="chevron"></i></button>
             <div class="session-dropdown" id="adminSessionMenu" hidden><button id="adminLogout" class="dropdown-action">Sign out</button></div>
           </div>
-          <button id="adminNotifications" class="icon-button" aria-label="Open notifications" title="Notifications"><span>&#128276;</span><b id="adminNotificationCount" hidden>0</b></button>
-          <button id="adminRefresh" class="icon-button" aria-label="Refresh dashboard" title="Refresh dashboard">&#8635;</button>
+          <button id="adminThemeToggle" class="icon-button" aria-label="Toggle light or dark theme" title="Toggle theme"><i data-lucide="sun"></i></button>
+          <button id="adminNotifications" class="icon-button" aria-label="Open notifications" title="Notifications"><i data-lucide="bell"></i><b id="adminNotificationCount" hidden>0</b></button>
+          <button id="adminRefresh" class="icon-button" aria-label="Refresh dashboard" title="Refresh dashboard"><i data-lucide="rotate-cw"></i></button>
         </div>
       </div>
     </header>
     <main class="map-wrap">
       <div id="map"></div>
       <aside class="admin-sidebar" aria-label="Operations dashboard">
-        <div class="admin-sidebar-heading"><div><span class="section-kicker">Command center</span><h1>Live operations</h1></div><button id="adminSidebarToggle" class="close-button" aria-label="Collapse operations panel">&times;</button></div>
+        <div class="admin-sidebar-heading"><div><span class="section-kicker">Command center</span><h1>Live operations</h1></div><button id="adminSidebarToggle" class="close-button" aria-label="Collapse operations panel"><i data-lucide="x"></i></button></div>
         <div class="metrics-grid"><div class="metric-card"><strong id="metricIncidents">0</strong><small>Open incidents</small></div><div class="metric-card"><strong id="metricTourists">0</strong><small>Tourists live</small></div><div class="metric-card"><strong id="metricFences">0</strong><small>Safety zones</small></div><div class="metric-card"><strong id="metricConnection">Live</strong><small>Map connection</small></div></div>
         <input id="incidentSearch" class="admin-search" type="search" placeholder="Search incident ID or description" aria-label="Search incidents">
         <div class="admin-filter-row"><button class="filter-chip active" data-filter="all">All</button><button class="filter-chip" data-filter="open">Open</button><button class="filter-chip" data-filter="acknowledged">Seen</button><button class="filter-chip" data-filter="resolved">Resolved</button></div>
         <div class="admin-section-heading"><strong>Incident queue</strong><button id="adminFocusIncidents" class="text-button">Focus map</button></div>
-        <div id="adminIncidentQueue" class="admin-queue"><div class="empty-state">Loading incidents...</div></div>
+        <div id="adminIncidentQueue" class="admin-queue"><div class="skeleton-row"><div class="skeleton-line"></div><div class="skeleton-line short"></div></div><div class="skeleton-row"><div class="skeleton-line"></div><div class="skeleton-line short"></div></div><div class="skeleton-row"><div class="skeleton-line"></div><div class="skeleton-line short"></div></div></div>
         <div class="admin-section-heading"><strong>Live tourists</strong><span id="touristLastSeen" class="small-muted">Waiting for signal</span></div>
         <div id="touristQueue" class="admin-queue compact"><div class="empty-state">No live locations yet</div></div>
         <div class="admin-section-heading"><strong>Safety zones</strong><span class="fence-actions"><button id="clearFences" class="text-button danger-text" disabled>Clear all zones </button><button id="adminShowAudit" class="text-button">Audit log</button></span></div>
-        <div id="fenceQueue" class="admin-queue compact"><div class="empty-state">Loading zones...</div></div>
+        <div id="fenceQueue" class="admin-queue compact"><div class="skeleton-row"><div class="skeleton-line"></div><div class="skeleton-line short"></div></div><div class="skeleton-row"><div class="skeleton-line"></div><div class="skeleton-line short"></div></div></div>
         <div class="layer-toggles"><label><input id="showIncidentLayer" type="checkbox" checked> Incidents</label><label><input id="showTouristLayer" type="checkbox" checked> Tourists</label><label><input id="showFenceLayer" type="checkbox" checked> Zones</label></div>
       </aside>
-      <button id="adminOpenSidebar" class="admin-open-sidebar" aria-label="Open operations panel">&#9776;</button>
+      <button id="adminOpenSidebar" class="admin-open-sidebar" aria-label="Open operations panel"><i data-lucide="panel-left-open"></i></button>
       <div class="map-toolbar" aria-label="Map controls">
-        <button id="adminZoomIn" class="map-tool" aria-label="Zoom in" title="Zoom in">+</button>
-        <button id="adminZoomOut" class="map-tool" aria-label="Zoom out" title="Zoom out">&#8722;</button>
+        <button id="adminZoomIn" class="map-tool" aria-label="Zoom in" title="Zoom in"><i data-lucide="plus"></i></button>
+        <button id="adminZoomOut" class="map-tool" aria-label="Zoom out" title="Zoom out"><i data-lucide="minus"></i></button>
         <span class="toolbar-rule"></span>
-        <button id="adminResetView" class="map-tool map-tool-wide" aria-label="Reset map view" title="Reset map view">&#9678;</button>
-        <button id="adminFullscreen" class="map-tool map-tool-wide" aria-label="Toggle fullscreen map" title="Toggle fullscreen map">&#9974;</button>
+        <button id="adminResetView" class="map-tool map-tool-wide" aria-label="Reset map view" title="Reset map view"><i data-lucide="crosshair"></i></button>
+        <button id="adminFullscreen" class="map-tool map-tool-wide" aria-label="Toggle fullscreen map" title="Toggle fullscreen map"><i data-lucide="maximize"></i></button>
       </div>
-      <button id="incidentToggle" class="incident-toggle" aria-expanded="false"><span class="incident-toggle-icon">!</span><span><strong>Active incidents</strong><small><b id="incidentCount">0</b> requiring attention</small></span><span class="chevron">&#8964;</span></button>
+      <button id="incidentToggle" class="incident-toggle" aria-expanded="false"><span class="incident-toggle-icon"><i data-lucide="triangle-alert"></i></span><span><strong>Active incidents</strong><small><b id="incidentCount">0</b> requiring attention</small></span><i data-lucide="chevron-down" class="chevron"></i></button>
       <aside class="incident-popup" id="incidentPopup" hidden>
         <div class="card incident-card">
           <div class="card-heading"><div><span class="section-kicker">Live response</span><strong>Active incidents</strong></div><button id="clearIncidents" class="text-button danger-text">Clear all</button></div>
@@ -61,7 +62,7 @@
       <div class="drawer-heading"><div><span class="section-kicker">Activity</span><strong>Notifications</strong></div><button id="adminClearNotifications" class="text-button">Clear</button></div>
       <div id="adminNotificationList" class="notification-list"><div class="empty-state">No new activity</div></div>
     </aside>
-    <aside class="audit-drawer" id="auditDrawer" aria-label="Admin audit log" hidden><div class="drawer-heading"><div><span class="section-kicker">Accountability</span><strong>Audit log</strong></div><button id="closeAudit" class="close-button" aria-label="Close audit log">&times;</button></div><div id="auditList" class="audit-list"><div class="empty-state">No recorded actions</div></div></aside>
+    <aside class="audit-drawer" id="auditDrawer" aria-label="Admin audit log" hidden><div class="drawer-heading"><div><span class="section-kicker">Accountability</span><strong>Audit log</strong></div><button id="closeAudit" class="close-button" aria-label="Close audit log"><i data-lucide="x"></i></button></div><div id="auditList" class="audit-list"><div class="empty-state">No recorded actions</div></div></aside>
     <div class="toast-region" id="toastRegion" aria-live="polite"></div>
       <!-- Incident details modal -->
       <div id="incidentModal" class="modal-backdrop" style="display:none">
@@ -97,7 +98,10 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
-    <link rel="stylesheet" href="/static/styles.css?v=7">
-    <script src="/static/admin.js?v=7"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="/static/styles.css?v=15">
+    <script src="/static/map-style.js?v=3"></script>
+    <script src="/static/admin.js?v=13"></script>
+    <script>TouriSafe.icons();</script>
   </body>
 </html>

@@ -1,5 +1,10 @@
 const map = L.map('map', {zoomControl: false, scrollWheelZoom: true, keyboard: true}).setView([20.5937,78.9629], 5);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19}).addTo(map);
+const lightTiles = TouriSafe.basemap('voyager').addTo(map);
+const darkTiles = TouriSafe.darkBasemap();
+function setBasemap(dark){
+  if (dark){ if (map.hasLayer(lightTiles)) map.removeLayer(lightTiles); darkTiles.addTo(map); }
+  else { if (map.hasLayer(darkTiles)) map.removeLayer(darkTiles); lightTiles.addTo(map); }
+}
 
 let marker = null;
 let accuracyCircle = null;
@@ -34,6 +39,21 @@ function setTouristAlert(title, message, tone='alert'){
   clearTimeout(alertTimeout);
   alertTimeout = setTimeout(() => { banner.hidden = true; }, 12000);
 }
+// Drive the circular risk gauge on the dashboard card from the current
+// safety state. Colour + arc length reflect how exposed the tourist is.
+function setSafetyGauge(state){
+  const arc = document.getElementById('touristGaugeArc');
+  const card = document.getElementById('touristDashboardCard');
+  if (!arc || !card) return;
+  const C = 2 * Math.PI * 30; // ring radius = 30
+  const s = String(state || '').toLowerCase();
+  let frac = 1, tone = 'safe';
+  if (s.includes('restrict')) { frac = 0.16; tone = 'danger'; }
+  else if (s.includes('high') || s.includes('risk') || s.includes('caution')) { frac = 0.5; tone = 'warn'; }
+  arc.style.strokeDasharray = C;
+  arc.style.strokeDashoffset = C * (1 - frac);
+  card.dataset.tone = tone;
+}
 function updateTripUI(){
   const button = document.getElementById('tripCheckIn');
   if (!button) return;
@@ -50,6 +70,7 @@ function applySettings(){
   document.getElementById('darkMapToggle').checked = Boolean(settings.darkMap);
   document.getElementById('languageSelect').value = settings.language || 'English';
   document.getElementById('map').classList.toggle('map-dark', Boolean(settings.darkMap));
+  setBasemap(Boolean(settings.darkMap));
 }
 function updateContactSummary(){
   const summary = document.getElementById('contactSummary');
@@ -63,6 +84,7 @@ function renderContacts(){
 }
 applySettings();
 updateContactSummary();
+setSafetyGauge('Safe');
 document.getElementById('touristSettings')?.addEventListener('click', () => { const drawer = document.getElementById('touristUtilityDrawer'); drawer.hidden = !drawer.hidden; });
 document.getElementById('closeUtility')?.addEventListener('click', () => { document.getElementById('touristUtilityDrawer').hidden = true; });
 document.getElementById('touristLegend')?.addEventListener('click', () => { document.getElementById('touristLegendPanel').hidden = false; });
@@ -117,17 +139,17 @@ try{
     try{
       const msg = JSON.parse(ev.data);
       if (msg.type === 'incident_created'){
-        L.marker([msg.lat, msg.lon]).bindPopup(msg.description || 'Incident').addTo(map);
+        TouriSafe.incidentMarker([msg.lat, msg.lon]).bindPopup(msg.description || 'Incident').addTo(map);
         notify('Incident reported', msg.description || 'An incident was reported nearby');
         setStatus('Incident reported');
       }
       if (msg.type === 'telemetry_anomaly'){
-        L.circle([msg.lat, msg.lon], {radius:50, color:'orange'}).addTo(map);
+        TouriSafe.ping([msg.lat, msg.lon], 'warn').addTo(map);
         notify('Telemetry anomaly', `User ${msg.user_id} speed ${msg.speed}`);
       }
       if (msg.type === 'fence_created'){
         // add to fences layer
-        const g = L.geoJSON(msg.geojson, {style: {color: msg.fence_type === 'restricted' ? 'red' : (msg.fence_type === 'high-risk' ? 'orange' : 'green')}}).addTo(fencesLayer);
+        const g = TouriSafe.decorateZone(L.geoJSON(msg.geojson, {style: TouriSafe.zoneStyle(msg.fence_type)}), {name: msg.name, type: msg.fence_type}).addTo(fencesLayer);
         // if current user location exists and inside, notify immediately
         if (marker && (msg.fence_type === 'restricted' || msg.fence_type === 'high-risk')){
           const p = [marker.getLatLng().lat, marker.getLatLng().lng];
@@ -148,8 +170,9 @@ try{
         setStatus(label+': '+msg.fence);
         document.getElementById('touristSafetyScore').textContent = msg.fence_type === 'restricted' ? 'Restricted' : 'High risk';
         document.getElementById('touristSafetyDetail').textContent = msg.fence;
+        setSafetyGauge(msg.fence_type === 'restricted' ? 'Restricted' : 'High risk');
         setTouristAlert(label, `You entered ${msg.fence}`, 'alert');
-        L.circle([msg.lat, msg.lon], {radius:50, color:'red'}).addTo(map);
+        TouriSafe.ping([msg.lat, msg.lon], 'alert').addTo(map);
       }
     }catch(e){ console.error(e) }
   }
@@ -160,10 +183,10 @@ async function loadFences(){
   const res = await fetch('/api/fences');
   const data = await res.json();
   data.forEach(f => {
-    L.geoJSON(f.geojson, {style: {color: f.fence_type === 'restricted' ? 'red' : (f.fence_type === 'high-risk' ? 'orange' : 'green')}}).addTo(fencesLayer);
+    TouriSafe.decorateZone(L.geoJSON(f.geojson, {style: TouriSafe.zoneStyle(f.fence_type)}), {name: f.name, type: f.fence_type}).addTo(fencesLayer);
   });
 }
-loadFences();
+loadFences().then(() => TouriSafe.fadeInZones(map));
 
 function setStatus(s){
   const status = document.getElementById('status');
@@ -253,9 +276,9 @@ document.getElementById('startTelemetry').onclick = async () => {
     setStatus('Requesting location...');
     watchId = navigator.geolocation.watchPosition(async (pos) => {
       const lat = pos.coords.latitude, lon = pos.coords.longitude;
-      if (marker) marker.setLatLng([lat,lon]); else marker = L.marker([lat,lon]).addTo(map);
+      if (marker) marker.setLatLng([lat,lon]); else marker = TouriSafe.selfMarker([lat,lon]).addTo(map);
       if (accuracyCircle) accuracyCircle.setLatLng([lat, lon]).setRadius(pos.coords.accuracy || 0);
-      else accuracyCircle = L.circle([lat, lon], {radius: pos.coords.accuracy || 0, color:'#2878c8', fillColor:'#2878c8', fillOpacity:.08, weight:1}).addTo(map);
+      else accuracyCircle = TouriSafe.accuracyCircle([lat, lon], pos.coords.accuracy || 0).addTo(map);
       map.setView([lat,lon], 15);
       await sendTelemetry(lat, lon);
       body.classList.add('tracking-active');
@@ -364,3 +387,14 @@ sosConfirm.onclick = async () => {
   setStatus('SOS sent: incident '+data.incident_id);
   notify('SOS sent', 'Incident '+data.incident_id);
 };
+
+// First-visit onboarding: a one-time welcome that explains zone alerts + SOS.
+(function initOnboarding(){
+  const overlay = document.getElementById('touristOnboarding');
+  if (!overlay) return;
+  if (!localStorage.getItem('ts_onboarded')) overlay.hidden = false;
+  document.getElementById('onboardingDone')?.addEventListener('click', () => {
+    overlay.hidden = true;
+    localStorage.setItem('ts_onboarded', '1');
+  });
+})();
