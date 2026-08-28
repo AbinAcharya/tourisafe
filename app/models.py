@@ -1,74 +1,104 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Float, ForeignKey, Text
+"""SQLAlchemy ORM models."""
+
+from datetime import datetime
+from sqlalchemy import (
+    Column,
+    Integer,
+    String,
+    Float,
+    Boolean,
+    DateTime,
+    Text,
+    ForeignKey,
+)
 from sqlalchemy.orm import relationship
-from datetime import datetime, timedelta
-from .database import Base
-import uuid
+from app.database import Base
 
 
 class User(Base):
+    """Auth user (admin or tourist)."""
+
     __tablename__ = "users"
+
     id = Column(Integer, primary_key=True, index=True)
-    username = Column(String, unique=True, index=True, nullable=False)
-    email = Column(String, unique=True, index=True, nullable=False)
-    password_hash = Column(String, nullable=False)
+    email = Column(String(255), unique=True, index=True, nullable=False)
+    name = Column(String(255), nullable=False)
+    hashed_password = Column(String(255), nullable=True)  # null for OAuth-only users
+    google_id = Column(String(255), unique=True, nullable=True)
+    avatar_url = Column(String(512), nullable=True)
+    phone = Column(String(50), nullable=True)
     is_admin = Column(Boolean, default=False)
+    is_active = Column(Boolean, default=True)
+    preferred_language = Column(String(10), default="en")
     created_at = Column(DateTime, default=datetime.utcnow)
 
+    tourist_profile = relationship("TouristProfile", back_populates="user", uselist=False)
 
-class TouristID(Base):
-    __tablename__ = "tourist_ids"
+
+class TouristProfile(Base):
+    """Extended tourist data linked to a User."""
+
+    __tablename__ = "tourist_profiles"
+
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
-    temp_id = Column(String, index=True, unique=True, default=lambda: str(uuid.uuid4()))
-    expires_at = Column(DateTime, default=lambda: datetime.utcnow() + timedelta(hours=24))
-    created_at = Column(DateTime, default=datetime.utcnow)
+    user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False)
+    nationality = Column(String(100), nullable=True)
+    emergency_contact_name = Column(String(255), nullable=True)
+    emergency_contact_phone = Column(String(50), nullable=True)
+    blood_type = Column(String(10), nullable=True)
+    allergies = Column(Text, nullable=True)
+    current_lat = Column(Float, nullable=True)
+    current_lng = Column(Float, nullable=True)
+    last_seen = Column(DateTime, default=datetime.utcnow)
+    is_in_zone = Column(Boolean, default=True)
+
+    user = relationship("User", back_populates="tourist_profile")
 
 
-class GeoFence(Base):
-    __tablename__ = "geo_fences"
+class Geofence(Base):
+    """Safe-zone polygon (stored as GeoJSON)."""
+
+    __tablename__ = "geofences"
+
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=False)
-    fence_type = Column(String, default="safe")  # safe, restricted, high-risk
-    geojson = Column(Text, nullable=False)  # store polygon GeoJSON
-    active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-
-class Telemetry(Base):
-    __tablename__ = "telemetry"
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
-    lat = Column(Float, nullable=False)
-    lon = Column(Float, nullable=False)
-    timestamp = Column(DateTime, default=datetime.utcnow)
-    speed = Column(Float, nullable=True)  # m/s or km/h depending on compute
-
-
-class Incident(Base):
-    __tablename__ = "incidents"
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
-    lat = Column(Float, nullable=False)
-    lon = Column(Float, nullable=False)
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    name = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
-    status = Column(String, default="open")
-
-
-class Notification(Base):
-    __tablename__ = "notifications"
-    id = Column(Integer, primary_key=True, index=True)
-    incident_id = Column(Integer, ForeignKey("incidents.id"), nullable=True)
-    channel = Column(String, default="webhook")
-    sent = Column(Boolean, default=False)
+    geojson = Column(Text, nullable=False)  # GeoJSON Polygon
+    is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
 
 
-class AuditLog(Base):
-    __tablename__ = "audit_logs"
+class SOSAlert(Base):
+    """Emergency SOS alert raised by a tourist."""
+
+    __tablename__ = "sos_alerts"
+
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
-    action = Column(String, nullable=False)
-    entity_type = Column(String, nullable=False)
-    entity_id = Column(Integer, nullable=True)
+    tourist_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    lat = Column(Float, nullable=True)
+    lng = Column(Float, nullable=True)
+    message = Column(Text, nullable=True)
+    status = Column(String(20), default="active")  # active, acknowledged, resolved
     created_at = Column(DateTime, default=datetime.utcnow)
+    resolved_at = Column(DateTime, nullable=True)
+    resolved_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    tourist = relationship("User", foreign_keys=[tourist_id])
+    resolver = relationship("User", foreign_keys=[resolved_by])
+
+
+class LocationPing(Base):
+    """Location history for telemetry."""
+
+    __tablename__ = "location_pings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tourist_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    lat = Column(Float, nullable=False)
+    lng = Column(Float, nullable=False)
+    accuracy = Column(Float, nullable=True)
+    battery_level = Column(Integer, nullable=True)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+
+    tourist = relationship("User", foreign_keys=[tourist_id])

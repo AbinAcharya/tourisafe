@@ -1,46 +1,49 @@
-import os
-import requests
-from .models import Notification
-from .database import SessionLocal
+"""Alert notification stubs.
+
+Integrate SMS, push, or regional authority webhooks here.
+"""
+
+import logging
 from datetime import datetime
-from .ws import manager
+
+from sqlalchemy.orm import Session
+from app.models import SOSAlert, TouristProfile, User
+
+logger = logging.getLogger(__name__)
 
 
-def notify_authorities(incident_id: int, channel: str = "webhook"):
-    db = SessionLocal()
-    try:
-        n = Notification(incident_id=incident_id, channel=channel, sent=False, created_at=datetime.utcnow())
-        db.add(n)
-        db.commit()
-        db.refresh(n)
-    finally:
-        db.close()
+async def notify_emergency_services(alert: SOSAlert, db: Session) -> None:
+    """Placeholder: send SOS to emergency services / authorities."""
+    tourist = db.query(User).filter(User.id == alert.tourist_id).first()
+    logger.warning(
+        "SOS ALERT %s — Tourist: %s (%s) Location: %s, %s Message: %s",
+        alert.id,
+        tourist.name if tourist else "Unknown",
+        tourist.email if tourist else "",
+        alert.lat,
+        alert.lng,
+        alert.message,
+    )
+    # TODO: integrate Twilio / Firebase / regional authority webhook
 
-    # send webhook if configured
-    webhook = os.environ.get('TOURISAFE_NOTIFICATION_WEBHOOK')
-    payload = {"incident_id": incident_id, "channel": channel}
-    sent = False
-    if webhook:
-        try:
-            requests.post(webhook, json=payload, timeout=5)
-            sent = True
-        except Exception:
-            sent = False
 
-    # update notification record
-    db = SessionLocal()
-    try:
-        rec = db.query(Notification).filter(Notification.id == n.id).first()
-        if rec:
-            rec.sent = sent
-            db.commit()
-    finally:
-        db.close()
+async def notify_emergency_contact(alert: SOSAlert, db: Session) -> None:
+    """Placeholder: notify the tourist's designated emergency contact."""
+    profile = db.query(TouristProfile).filter(TouristProfile.user_id == alert.tourist_id).first()
+    if profile and profile.emergency_contact_phone:
+        logger.info(
+            "Would SMS %s (%s) about SOS from tourist %s at %s, %s",
+            profile.emergency_contact_name,
+            profile.emergency_contact_phone,
+            alert.tourist_id,
+            alert.lat,
+            alert.lng,
+        )
+        # TODO: integrate Twilio / Vonage SMS API
 
-    # broadcast to connected websocket clients
-    try:
-        import asyncio
-        asyncio.create_task(manager.broadcast({"type": "incident_notification", "incident_id": incident_id}))
-    except Exception:
-        pass
 
+async def notify_admins(alert: SOSAlert, db: Session) -> None:
+    """Placeholder: push notification to admin dashboard."""
+    admins = db.query(User).filter(User.is_admin == True, User.is_active == True).all()
+    for admin in admins:
+        logger.info("Would push SOS notification to admin %s (%s)", admin.name, admin.email)
