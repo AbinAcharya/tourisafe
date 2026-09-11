@@ -1,0 +1,25 @@
+{
+  "name": "Tourisafe — Personal safety",
+  "short_name": "Tourisafe",
+  "description": "Smart tourist safety: live zone alerts, one-tap SOS, and real-time location status.",
+  "start_url": "/tourist",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f5f6f2",
+  "theme_color": "#2f6b5b",
+  "icons": [
+    {
+      "src": "/static/logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/static/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

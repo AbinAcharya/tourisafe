@@ -6,14 +6,21 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from . import models, auth, fencing, telemetry as telemetry_utils, alerts
-from .database import engine, Base, get_db
+from .database import engine, Base, get_db, ensure_schema
 from . import schemas
+import os
 import json
+import uuid
 from datetime import datetime
 from .ws import manager
 from fastapi import WebSocket
 
 Base.metadata.create_all(bind=engine)
+# Apply non-destructive column migrations for databases created before newer columns existed.
+ensure_schema()
+
+# Google Sign-In client id (empty disables the feature; the frontend hides the button).
+GOOGLE_CLIENT_ID = os.environ.get("TOURISAFE_GOOGLE_CLIENT_ID", "")
 
 # NOTE: removed automatic creation of a default admin user to allow manual admin setup
 # Use the script scripts/create_admin.py to create an admin account when needed.
@@ -36,20 +43,16 @@ def record_audit(db: Session, user: models.User, action: str, entity_type: str, 
 
 
 @app.post("/register")
-def register(username: str, email: str, password: str, db: Session = Depends(get_db)):
+def register(payload: schemas.RegisterIn, db: Session = Depends(get_db)):
     try:
-        # debug log
-        with open('debug.log','a') as _f: _f.write(f"register attempt: {username} {email}\n")
-        existing = db.query(models.User).filter((models.User.username == username) | (models.User.email == email)).first()
+        existing = db.query(models.User).filter((models.User.username == payload.username) | (models.User.email == payload.email)).first()
         if existing:
             raise HTTPException(status_code=400, detail="Username or email already registered")
-        ph = auth.get_password_hash(password)
-        with open('debug.log','a') as _f: _f.write(f"password hash ok, len={len(ph)}\n")
-        user = models.User(username=username, email=email, password_hash=ph)
+        ph = auth.get_password_hash(payload.password)
+        user = models.User(username=payload.username, email=payload.email, password_hash=ph)
         db.add(user)
         db.commit()
         db.refresh(user)
-        with open('debug.log','a') as _f: _f.write(f"user created id={user.id}\n")
         return {"id": user.id, "username": user.username}
     except HTTPException:
         raise
@@ -60,10 +63,83 @@ def register(username: str, email: str, password: str, db: Session = Depends(get
 @app.post("/login")
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.username == form_data.username).first()
-    if not user or not auth.verify_password(form_data.password, user.password_hash):
+    if not user or not user.password_hash:
         raise HTTPException(status_code=400, detail="Incorrect username or password")
+
+    ok = auth.verify_password(form_data.password, user.password_hash)
+    # One-time migration: legacy accounts stored the password as plaintext (the old
+    # bcrypt path silently failed). If the stored value isn't a recognised hash and it
+    # matches, accept the login and transparently upgrade it to a proper pbkdf2 hash.
+    if not ok and not auth.is_hashed(user.password_hash) and form_data.password == user.password_hash:
+        ok = True
+    if not ok:
+        raise HTTPException(status_code=400, detail="Incorrect username or password")
+    if not auth.is_hashed(user.password_hash):
+        user.password_hash = auth.get_password_hash(form_data.password)
+        db.commit()
+
     token = auth.create_access_token({"sub": user.username}, expires_delta=timedelta(hours=12))
-    return {"access_token": token, "token_type": "bearer"}
+    return {"access_token": token, "token_type": "bearer", "user_id": user.id}
+
+
+@app.get("/api/config")
+def public_config():
+    """Client-readable configuration. Empty client id keeps the Google button hidden."""
+    return {"google_client_id": GOOGLE_CLIENT_ID}
+
+
+def _unique_username(db: Session, base: str) -> str:
+    base = "".join(ch for ch in (base or "user") if ch.isalnum() or ch in ("_", "-", ".")) or "user"
+    candidate = base
+    n = 0
+    while db.query(models.User).filter(models.User.username == candidate).first():
+        n += 1
+        candidate = f"{base}{n}"
+    return candidate
+
+
+@app.post("/auth/google")
+def auth_google(payload: schemas.GoogleAuthIn, db: Session = Depends(get_db)):
+    if not GOOGLE_CLIENT_ID:
+        raise HTTPException(status_code=503, detail="Google Sign-In is not configured")
+    try:
+        from google.oauth2 import id_token as google_id_token
+        from google.auth.transport import requests as google_requests
+        info = google_id_token.verify_oauth2_token(payload.credential, google_requests.Request(), GOOGLE_CLIENT_ID)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid Google credential")
+
+    if info.get("iss") not in ("accounts.google.com", "https://accounts.google.com"):
+        raise HTTPException(status_code=401, detail="Invalid token issuer")
+    if not info.get("email_verified"):
+        raise HTTPException(status_code=401, detail="Google email not verified")
+
+    sub = info.get("sub")
+    email = info.get("email")
+    if not sub or not email:
+        raise HTTPException(status_code=401, detail="Google token missing required claims")
+
+    # Find by Google subject first, then link an existing account by email.
+    user = db.query(models.User).filter(models.User.google_sub == sub).first()
+    if not user:
+        user = db.query(models.User).filter(models.User.email == email).first()
+        if user:
+            user.google_sub = sub
+        else:
+            user = models.User(
+                username=_unique_username(db, email.split("@")[0]),
+                email=email,
+                google_sub=sub,
+                # Unusable sentinel: satisfies the still-NOT-NULL column on existing DBs
+                # and can never match a login attempt (it is not a valid hash).
+                password_hash=uuid.uuid4().hex,
+            )
+            db.add(user)
+        db.commit()
+        db.refresh(user)
+
+    token = auth.create_access_token({"sub": user.username}, expires_delta=timedelta(hours=12))
+    return {"access_token": token, "token_type": "bearer", "user_id": user.id}
 
 
 @app.post("/generate_tourist_id")
@@ -306,6 +382,23 @@ def admin_change_password(payload: schemas.ChangePassword, user: models.User = D
 @app.get("/")
 def index():
     return RedirectResponse(url="/static/index.html")
+
+
+# The service worker and manifest have to be served from the site ROOT: a worker
+# under /static/ may only control /static/*, and a manifest's scope cannot point
+# above its own directory. Both files still live in static/.
+@app.get("/sw.js")
+def service_worker():
+    return FileResponse(
+        "static/sw.js",
+        media_type="application/javascript",
+        headers={"Service-Worker-Allowed": "/", "Cache-Control": "no-cache"},
+    )
+
+
+@app.get("/manifest.webmanifest")
+def web_manifest():
+    return FileResponse("static/manifest.webmanifest", media_type="application/manifest+json")
 
 
 @app.get("/tourist")

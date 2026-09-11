@@ -1,3 +1,4 @@
+import os
 from datetime import datetime, timedelta
 from passlib.context import CryptContext
 from jose import JWTError, jwt
@@ -7,31 +8,36 @@ from sqlalchemy.orm import Session
 from . import models
 from .database import get_db
 
-SECRET_KEY = "change-this-secret-in-prod"
+# Read the signing secret from the environment. The default preserves any tokens
+# already issued in development; production MUST set TOURISAFE_SECRET_KEY.
+SECRET_KEY = os.environ.get("TOURISAFE_SECRET_KEY", "change-this-secret-in-prod")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# pbkdf2_sha256 is pure-stdlib (hashlib) so it has no native-library coupling and
+# works reliably on every platform. bcrypt is intentionally not used here because
+# bcrypt>=4.1 is incompatible with passlib 1.7.x and silently raised on every hash.
+pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/login")
+
+
+def is_hashed(stored: str) -> bool:
+    """True when the stored value is a recognised passlib hash (not legacy plaintext)."""
+    try:
+        return pwd_context.identify(stored) is not None
+    except Exception:
+        return False
 
 
 def verify_password(plain_password, hashed_password):
     try:
         return pwd_context.verify(plain_password, hashed_password)
     except Exception:
-        # fallback: if stored value is plain (dev mode), compare directly
-        try:
-            return plain_password == hashed_password
-        except Exception:
-            return False
+        return False
 
 
 def get_password_hash(password):
-    try:
-        return pwd_context.hash(password)
-    except Exception:
-        # bcrypt not available in some environments; fall back to storing plain (dev only)
-        return password
+    return pwd_context.hash(password)
 
 
 def create_access_token(data: dict, expires_delta: timedelta = None):

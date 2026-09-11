@@ -2,6 +2,16 @@ from pydantic import BaseModel
 from typing import Optional, Any
 
 
+class RegisterIn(BaseModel):
+    username: str
+    email: str
+    password: str
+
+
+class GoogleAuthIn(BaseModel):
+    credential: str
+
+
 class FenceCreate(BaseModel):
     name: str
     fence_type: str

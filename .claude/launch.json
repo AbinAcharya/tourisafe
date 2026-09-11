@@ -6,6 +6,13 @@
       "runtimeExecutable": ".venv/Scripts/python.exe",
       "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8000"],
       "port": 8000
+    },
+    {
+      "name": "tourisafe-preview",
+      "runtimeExecutable": ".venv/Scripts/python.exe",
+      "runtimeArgs": ["-c", "import os, uvicorn; uvicorn.run('app.main:app', host='127.0.0.1', port=int(os.environ.get('PORT', '8001')))"],
+      "port": 8001,
+      "autoPort": true
     }
   ]
 }
