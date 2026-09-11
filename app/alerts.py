@@ -12,6 +12,21 @@ from app.models import SOSAlert, TouristProfile, User
 logger = logging.getLogger(__name__)
 
 
+def notify_authorities(incident_id: int) -> None:
+    """Compatibility stub for notifying relevant authorities about an SOS incident.
+
+    The project's SOS endpoint invokes this helper without a database session,
+    so this function intentionally keeps the API tiny and logs the alert instead
+    of trying to reach external services in the default prototype setup.
+    """
+
+    logger.warning("SOS authority notification triggered for incident %s", incident_id)
+
+
+# Backward compatibility for older typoed call sites.
+notify_authoritites = notify_authorities
+
+
 async def notify_emergency_services(alert: SOSAlert, db: Session) -> None:
     """Placeholder: send SOS to emergency services / authorities."""
     tourist = db.query(User).filter(User.id == alert.tourist_id).first()
